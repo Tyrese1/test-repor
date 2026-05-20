@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile information and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "description": "User's profile picture URL" },
+        "autoSortEnabled": { "type": "boolean", "description": "Whether AI magic sorting is enabled" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the profile was created" }
+      },
+      "required": ["uid", "email", "autoSortEnabled", "createdAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A personal note or thought",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the note" },
+        "userId": { "type": "string", "description": "UID of the owner" },
+        "title": { "type": "string", "description": "Title of the note" },
+        "content": { "type": "string", "description": "Formatted content of the note" },
+        "maskedContent": { "type": "string", "description": "Masked version of the content" },
+        "rawContent": { "type": "string", "description": "Original raw content" },
+        "category": { "type": "string", "description": "Category of the note" },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Tags for the note" },
+        "isAutoSorted": { "type": "boolean", "description": "Whether the note was auto-sorted by AI" },
+        "isStarred": { "type": "boolean", "description": "Whether the note is starred" },
+        "isPublic": { "type": "boolean", "description": "Whether the note is publicly accessible via link" },
+        "hasSensitiveData": { "type": "boolean", "description": "Whether the note contains sensitive information" },
+        "status": { "type": "string", "enum": ["ready", "processing", "error"], "description": "Current processing status of the note" },
+        "error": { "type": "string", "description": "Error message if processing failed" },
+        "password": { "type": "string", "description": "Hashed or plain password for note protection" },
+        "failedAttempts": { "type": "integer", "description": "Number of failed password attempts" },
+        "lockedUntil": { "type": "string", "format": "date-time", "description": "Timestamp until which the note is locked" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the note was created" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the note was last updated" }
+      },
+      "required": ["userId", "title", "content", "maskedContent", "rawContent", "createdAt", "updatedAt", "hasSensitiveData", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    },
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "User notes"
+    }
+  }
+}

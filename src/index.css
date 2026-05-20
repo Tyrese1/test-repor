@@ -1,0 +1,1339 @@
+@import "tailwindcss";
+
+/* Tailwind v4 auto-scans the project for class names. Exclude server/
+   config files so it doesn't try to process them as CSS sources. */
+@source not "../api/**/*";
+@source not "../*.config.{js,ts,mjs,cjs}";
+@source not "../firebase.json";
+@source not "../firestore.rules";
+
+@variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   ZAKAR DESIGN TOKENS — v2
+
+   CRITICAL NOTE: Tokens are defined in :root (not @theme) so they
+   don't generate Tailwind utilities that collide with defaults.
+   Tailwind v4's @theme block auto-generates utility classes from
+   custom properties (e.g. `--spacing-lg: 20px` creates a `max-w-lg`
+   utility that *overrides* Tailwind's default 32rem version).
+
+   Pattern: define CSS variables in :root, reference them in our
+   own `zk-*` utility classes only. Tailwind's default utilities
+   (text-lg, max-w-md, rounded-xl, etc.) remain untouched.
+   ============================================================ */
+
+@theme {
+  /* Only fonts go in @theme — font-sans, font-mono, font-display
+     are intentional Tailwind hooks, not layout utilities. */
+  --font-display: "Nunito", system-ui, sans-serif;
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+}
+
+:root {
+  /* ========== Colors — Brand ========== */
+  /* THEME REVERT POINT — if user requests the previous theme back,
+     restore these values:
+       --color-primary: #4f6354;
+       --color-primary-hover: #3a4d3e;
+       --color-primary-container: #d2e8d5;
+       --color-primary-container-muted: #e4f0e6;
+       --color-on-primary-container: #3a5240;
+       --color-primary-dark: #6b8f72;
+       --color-primary-dark-container: rgba(79, 99, 84, 0.2);
+       --color-on-primary-dark-container: #a8c9ac;
+     The mockup-aligned theme uses #2d5a44 as the canonical accent,
+     with #e8f3ee as selected-state bg and #dcfce8 as hover bg. */
+  --color-primary: #2d5a44;
+  --color-primary-hover: #1f4534;
+  --color-primary-container: #e8f3ee;
+  --color-primary-container-muted: #dcfce8;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #2d5a44;
+
+  /* Dark mode brand variants — slightly lighter so the brand reads on
+     a dark surface. Kept tonally close to the light tokens so the
+     theme feels unified across modes. */
+  --color-primary-dark: #6b8f72;
+  --color-primary-dark-hover: #7fa388;
+  --color-primary-dark-container: rgba(45, 90, 68, 0.35);
+  --color-on-primary-dark-container: #a8d0b0;
+
+  /* ========== Colors — Surface ========== */
+  --color-surface: #f4f7f2;
+  --color-surface-raised: #ffffff;
+  --color-surface-muted: #eaf0e8;
+  --color-surface-sunken: #dde5da;
+
+  --color-surface-dark: #202124;
+  --color-surface-dark-raised: #2d2e31;
+  --color-surface-dark-muted: #28292c;
+  --color-surface-dark-sunken: #3c3d40;
+
+  /* ========== Colors — Text ========== */
+  --color-text: #2e3431;
+  --color-text-secondary: #5b605d;
+  --color-text-muted: #747d78;
+  --color-text-faint: #abb4af;
+
+  --color-text-dark: #e8eaed;
+  --color-text-dark-secondary: #bdc1c6;
+  --color-text-dark-muted: #9aa0a6;
+  --color-text-dark-faint: #5f6368;
+
+  /* ========== Colors — Borders ========== */
+  --color-border: #e5e9e5;
+  --color-border-strong: #cfd4cf;
+  --color-border-dark: #3c4043;
+  --color-border-dark-strong: #5f6368;
+
+  /* ========== Colors — Category Accents ========== */
+  --color-cat-task: #4f6354;
+  --color-cat-task-bg: #d2e8d5;
+  --color-cat-task-text: #3a5240;
+
+  --color-cat-idea: #eab308;
+  --color-cat-idea-bg: #fef3c7;
+  --color-cat-idea-text: #854d0e;
+
+  --color-cat-credential: #fb7185;
+  --color-cat-credential-bg: #ffe4e6;
+  --color-cat-credential-text: #9f1239;
+
+  --color-cat-web: #38bdf8;
+  --color-cat-web-bg: #e0f2fe;
+  --color-cat-web-text: #075985;
+
+  --color-cat-personal: #a78bfa;
+  --color-cat-personal-bg: #ede9fe;
+  --color-cat-personal-text: #5b21b6;
+
+  --color-cat-other: #9aaa9f;
+  --color-cat-other-bg: #f2f4f1;
+  --color-cat-other-text: #5b605d;
+
+  /* ========== Colors — Status ========== */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #f43f5e;
+  --color-info: #3b82f6;
+
+  /* ========== Radii (zk-prefixed to avoid Tailwind collision) ========== */
+  --zk-radius-xs: 4px;
+  --zk-radius-sm: 6px;
+  --zk-radius-md: 10px;
+  --zk-radius-lg: 14px;
+  --zk-radius-xl: 20px;
+  --zk-radius-2xl: 28px;
+  --zk-radius-full: 9999px;
+
+  /* ========== Elevation (zk-prefixed) ========== */
+  --zk-shadow-sm:
+    0 1px 2px rgba(46, 52, 45, 0.04), 0 1px 4px rgba(46, 52, 45, 0.03);
+  --zk-shadow-md:
+    0 2px 8px rgba(46, 52, 45, 0.05), 0 4px 12px rgba(46, 52, 45, 0.04);
+  --zk-shadow-lg:
+    0 8px 24px rgba(46, 52, 45, 0.08), 0 12px 40px rgba(46, 52, 45, 0.06);
+  --zk-shadow-xl:
+    0 30px 60px -20px rgba(46, 52, 49, 0.1),
+    0 10px 20px -8px rgba(46, 52, 49, 0.05);
+  --zk-shadow-focus-ring: 0 0 0 3px rgba(79, 99, 84, 0.12);
+
+  /* ========== Motion ========== */
+  --zk-duration-fast: 150ms;
+  --zk-duration-normal: 250ms;
+  --zk-duration-slow: 350ms;
+  --zk-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --zk-ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+}
+
+@layer base {
+  .markdown-body {
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    /* Prevent any descendant (long URLs, unbreakable tokens) from
+       blowing past the modal's max-w-4xl container in view mode.
+       Edit mode is unaffected — TipTap manages its own wrapping. */
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    min-width: 0;
+  }
+  .dark .markdown-body {
+    color: var(--color-text-dark-secondary);
+  }
+  .markdown-body h1 {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 1.5rem 0 1rem;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+  }
+  .dark .markdown-body h1 {
+    color: var(--color-text-dark);
+  }
+  .markdown-body h2 {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 1.25rem 0 0.75rem;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+  .dark .markdown-body h2 {
+    color: var(--color-text-dark);
+  }
+  .markdown-body h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 1rem 0 0.5rem;
+    color: var(--color-text);
+  }
+  .dark .markdown-body h3 {
+    color: var(--color-text-dark);
+  }
+  .markdown-body h4 {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0.75rem 0 0.5rem;
+    color: var(--color-text);
+  }
+  .dark .markdown-body h4 {
+    color: var(--color-text-dark);
+  }
+  .markdown-body p {
+    margin-bottom: 1rem;
+  }
+  .markdown-body ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .markdown-body ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .markdown-body li {
+    margin-bottom: 0.25rem;
+  }
+  .markdown-body li > strong:first-child {
+    color: var(--color-text);
+    font-weight: 700;
+  }
+  .dark .markdown-body li > strong:first-child {
+    color: var(--color-text-dark);
+  }
+  .markdown-body code {
+    /* MD3 secondary container styling for inline code chips. The
+       background is a soft sage tint that works on white AND on
+       any pastel-tinted card (tested against rose/amber/blush/etc).
+       Generous padding and rounded-full shape gives a premium chip
+       feel rather than a developery bordered span. */
+    background: #d2e8d5;
+    color: #1f3a26;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    font-weight: 600;
+    border: none;
+    box-shadow: inset 0 0 0 1px rgba(31, 58, 38, 0.06);
+    /* Allow long shell commands / paths to wrap inside the modal
+       rather than blowing out the layout. `anywhere` lets the break
+       happen mid-token when there's no natural break point (e.g. a
+       long absolute path with no spaces). Without this, inline code
+       like `rm -rf /Users/.../some/long/path` overflows the modal
+       width — visible in view mode where the modal is constrained
+       to max-w-4xl. Edit mode uses TipTap which wraps natively. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .dark .markdown-body code {
+    background: #3d5142;
+    color: #d4e8d8;
+    border-color: transparent;
+    box-shadow: inset 0 0 0 1px rgba(212, 232, 216, 0.08);
+  }
+  /* Code inside links — keep brand color but slightly stronger */
+  .markdown-body a code {
+    color: #0c4a6e;
+    background: #b8dcf2;
+  }
+  .dark .markdown-body a code {
+    color: #b8dcf2;
+    background: #1e3a52;
+  }
+  .markdown-body pre {
+    background: var(--color-surface-muted);
+    color: var(--color-text-secondary);
+    padding: 20px;
+    border-radius: var(--zk-radius-lg);
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--color-border);
+    box-shadow: var(--zk-shadow-sm);
+  }
+  .dark .markdown-body pre {
+    background: var(--color-surface-dark-muted);
+    color: var(--color-text-dark-secondary);
+    border-color: var(--color-border-dark);
+  }
+  .markdown-body pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    border: none;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  .markdown-body a {
+    color: var(--color-primary);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .markdown-body a:hover {
+    text-decoration: underline;
+  }
+  .dark .markdown-body a {
+    color: var(--color-primary-dark);
+  }
+  .markdown-body strong {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+  .dark .markdown-body strong {
+    color: var(--color-text-dark);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--zk-radius-full);
+    transition: background var(--zk-duration-fast) var(--zk-ease-standard);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-strong);
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border-dark);
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-dark-strong);
+  }
+}
+
+@layer utilities {
+  /* Semantic surface classes */
+  .zk-surface {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+  }
+  .dark .zk-surface {
+    background-color: var(--color-surface-dark);
+    color: var(--color-text-dark);
+  }
+  .zk-surface-raised {
+    background-color: var(--color-surface-raised);
+  }
+  .dark .zk-surface-raised {
+    background-color: var(--color-surface-dark-raised);
+  }
+  .zk-surface-muted {
+    background-color: var(--color-surface-muted);
+  }
+  .dark .zk-surface-muted {
+    background-color: var(--color-surface-dark-muted);
+  }
+  .zk-surface-sunken {
+    background-color: var(--color-surface-sunken);
+  }
+  .dark .zk-surface-sunken {
+    background-color: var(--color-surface-dark-sunken);
+  }
+
+  /* Semantic text classes */
+  .zk-text {
+    color: var(--color-text);
+  }
+  .dark .zk-text {
+    color: var(--color-text-dark);
+  }
+  .zk-text-secondary {
+    color: var(--color-text-secondary);
+  }
+  .dark .zk-text-secondary {
+    color: var(--color-text-dark-secondary);
+  }
+  .zk-text-muted {
+    color: var(--color-text-muted);
+  }
+  .dark .zk-text-muted {
+    color: var(--color-text-dark-muted);
+  }
+  .zk-text-faint {
+    color: var(--color-text-faint);
+  }
+  .dark .zk-text-faint {
+    color: var(--color-text-dark-faint);
+  }
+
+  /* Note-detail toolbar icon buttons. These need to be VISIBLE
+     at rest (people need to find pin/star/share/edit fast), with
+     dramatic hover feedback so it never reads as "grayed out".
+     Active scale gives tactile click feedback. */
+  :root {
+    --zk-quote-bar: #2d5a44;
+  }
+  .dark {
+    --zk-quote-bar: #8fb89a;
+  }
+
+  /* Lock pulse — gentle "secured" indicator on the fingerprint
+     icon shown whenever a note is locked. The animation runs as a
+     soft scale + glow halo so it reads as "watching over the
+     note" rather than an alert. Used on both the in-card lock
+     indicator and the toolbar's "Manage lock" button. */
+  @keyframes zk-lock-pulse {
+    0%, 100% {
+      transform: scale(1);
+      filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+    }
+    50% {
+      transform: scale(1.08);
+      filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.6));
+    }
+  }
+  .zk-lock-pulse {
+    animation: zk-lock-pulse 2.4s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  .zk-toolbar-icon {
+    color: #5a6660;
+    transition: color 0.18s ease, background 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+  }
+  .zk-toolbar-icon:hover {
+    color: #1f4534;
+    background: rgba(45, 90, 68, 0.12);
+    transform: scale(1.08);
+  }
+  .zk-toolbar-icon:active {
+    transform: scale(0.85);
+    box-shadow: 0 0 0 3px rgba(45, 90, 68, 0.2);
+  }
+  .dark .zk-toolbar-icon {
+    color: #b8c0bb;
+  }
+  .dark .zk-toolbar-icon:hover {
+    color: #c5e0cc;
+    background: rgba(143, 184, 154, 0.22);
+  }
+  .dark .zk-toolbar-icon:active {
+    box-shadow: 0 0 0 3px rgba(143, 184, 154, 0.3);
+  }
+
+  /* Tap-flash animation — for buttons that should give visible
+     feedback on click even when they're already styled. Adds a
+     brief sage ring + scale-down. Triggered by adding the class
+     temporarily via onClick handlers (or with active: pseudo).
+     Used on pin, palette, share, settings cog. */
+  @keyframes zk-tap-flash {
+    0% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgba(45, 90, 68, 0.55);
+    }
+    40% {
+      transform: scale(0.88);
+      box-shadow: 0 0 0 6px rgba(45, 90, 68, 0.2);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgba(45, 90, 68, 0);
+    }
+  }
+  .zk-tap-flash {
+    animation: zk-tap-flash 0.4s ease-out;
+  }
+
+  /* Borders */
+  .zk-border-color {
+    border-color: var(--color-border);
+  }
+  .dark .zk-border-color {
+    border-color: var(--color-border-dark);
+  }
+  .zk-border-strong {
+    border-color: var(--color-border-strong);
+  }
+  .dark .zk-border-strong {
+    border-color: var(--color-border-dark-strong);
+  }
+
+  /* Brand primary */
+  .zk-bg-primary {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+  .zk-bg-primary:hover {
+    background-color: var(--color-primary-hover);
+  }
+  .dark .zk-bg-primary {
+    background-color: var(--color-primary-dark);
+  }
+  .dark .zk-bg-primary:hover {
+    background-color: var(--color-primary-dark-hover);
+  }
+  .zk-text-primary-brand {
+    color: var(--color-primary);
+  }
+  .dark .zk-text-primary-brand {
+    color: var(--color-primary-dark);
+  }
+
+  /* Primary container */
+  .zk-bg-primary-container {
+    background-color: var(--color-primary-container);
+    color: var(--color-on-primary-container);
+  }
+  .dark .zk-bg-primary-container {
+    background-color: var(--color-primary-dark-container);
+    color: var(--color-on-primary-dark-container);
+  }
+
+  /* Shadows */
+  .zk-shadow-sm {
+    box-shadow: var(--zk-shadow-sm);
+  }
+  .zk-shadow-md {
+    box-shadow: var(--zk-shadow-md);
+  }
+  .zk-shadow-lg {
+    box-shadow: var(--zk-shadow-lg);
+  }
+  .zk-shadow-xl {
+    box-shadow: var(--zk-shadow-xl);
+  }
+
+  /* Focus ring */
+  .zk-focus-ring:focus-visible {
+    outline: none;
+    box-shadow: var(--zk-shadow-focus-ring);
+  }
+}
+
+/* ============================================================
+   PER-NOTE BACKGROUND COLORS
+
+   These classes apply to note cards and modals when the user
+   picks a color. Using class-driven CSS variables (not inline
+   styles) so:
+     1. `.dark` parent selector auto-flips light → dark values.
+     2. Theme switches are handled by the browser instantly,
+        with no React re-render gap.
+     3. Tokens stay in one place, easy to tweak.
+
+   Material Design 3 tonal palette: tone 95 in light, tone 20-25
+   in dark. Border is one tonal step stronger than surface.
+
+   IMPORTANT: keep these IN SYNC with NOTE_COLOR_TOKENS in App.tsx.
+   ============================================================ */
+
+.zk-note-bg-default {
+  --zk-note-bg: #ffffff;
+  --zk-note-border: #dde5da;
+}
+.dark .zk-note-bg-default {
+  --zk-note-bg: #2d2e31;
+  --zk-note-border: rgba(255, 255, 255, 0.06);
+}
+
+/* Off-white (renamed from "sage" key, same key for backward compat).
+   Subtle warm-cream tone — works well as a "this note is special
+   but not loud" background. */
+.zk-note-bg-sage {
+  --zk-note-bg: #f5f3ec;
+  --zk-note-border: #e2dfd6;
+}
+.dark .zk-note-bg-sage {
+  --zk-note-bg: #2f2f2c;
+  --zk-note-border: #3d3d39;
+}
+
+/* Coral (was rose) — warmer peachy pink */
+.zk-note-bg-rose {
+  --zk-note-bg: #f8b9a8;
+  --zk-note-border: #f0a08c;
+}
+.dark .zk-note-bg-rose {
+  --zk-note-bg: #4a2a23;
+  --zk-note-border: #5e3d33;
+}
+
+/* Peach (was amber) — soft orange */
+.zk-note-bg-amber {
+  --zk-note-bg: #f9c89a;
+  --zk-note-border: #f5b885;
+}
+.dark .zk-note-bg-amber {
+  --zk-note-bg: #4a3220;
+  --zk-note-border: #5e4435;
+}
+
+/* Sand (new) — pale yellow */
+.zk-note-bg-sand {
+  --zk-note-bg: #fff3a8;
+  --zk-note-border: #f5e88f;
+}
+.dark .zk-note-bg-sand {
+  --zk-note-bg: #43401f;
+  --zk-note-border: #575433;
+}
+
+/* Sky (was ocean) — pale blue */
+.zk-note-bg-ocean {
+  --zk-note-bg: #cee0ec;
+  --zk-note-border: #b3d0e0;
+}
+.dark .zk-note-bg-ocean {
+  --zk-note-bg: #1f3142;
+  --zk-note-border: #314558;
+}
+
+/* Ocean (new sky-deep) — medium blue */
+.zk-note-bg-sky-deep {
+  --zk-note-bg: #a8c5da;
+  --zk-note-border: #90b5cd;
+}
+.dark .zk-note-bg-sky-deep {
+  --zk-note-bg: #1f334a;
+  --zk-note-border: #33495e;
+}
+
+/* Lavender — softer purple */
+.zk-note-bg-lavender {
+  --zk-note-bg: #cabae0;
+  --zk-note-border: #b8a6d1;
+}
+.dark .zk-note-bg-lavender {
+  --zk-note-bg: #2f2a3d;
+  --zk-note-border: #43395a;
+}
+
+/* Blush — gentler pink */
+.zk-note-bg-blush {
+  --zk-note-bg: #f0d6dd;
+  --zk-note-border: #dfbcc6;
+}
+.dark .zk-note-bg-blush {
+  --zk-note-bg: #3a2935;
+  --zk-note-border: #523c47;
+}
+
+/* Sage (was mint) — deeper mint-green */
+.zk-note-bg-mint {
+  --zk-note-bg: #a6dcc9;
+  --zk-note-border: #8fcfb9;
+}
+.dark .zk-note-bg-mint {
+  --zk-note-bg: #1f3935;
+  --zk-note-border: #314f47;
+}
+
+/* Mint (new mint-light) — softer mint */
+.zk-note-bg-mint-light {
+  --zk-note-bg: #c8e8d3;
+  --zk-note-border: #b0dcc1;
+}
+.dark .zk-note-bg-mint-light {
+  --zk-note-bg: #1f3a2b;
+  --zk-note-border: #314c3f;
+}
+
+/* Beige (was stone) — warm neutral */
+.zk-note-bg-stone {
+  --zk-note-bg: #e6dfd0;
+  --zk-note-border: #d0c8b8;
+}
+.dark .zk-note-bg-stone {
+  --zk-note-bg: #33322d;
+  --zk-note-border: #494538;
+}
+
+/* The note-card class consumes the variables. Cards themselves
+   get class="zk-note-card zk-note-bg-{key}" — switching the key
+   class instantly retints the card without any JS. */
+.zk-note-card {
+  background-color: var(--zk-note-bg);
+  border: 1px solid var(--zk-note-border);
+  /* Fast, surgical transition. Only animates surface tints — keeps
+     theme/color switches feeling instant. Transform/shadow get their
+     own transitions via Tailwind classes on the card. */
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+/* List-view variant — same color tokens but uses a complete border
+   on all sides (matches grid cards visually). The left edge gets a
+   slightly thicker accent of the same border color for category cue. */
+.zk-note-card-list {
+  background-color: var(--zk-note-bg);
+  border: 1px solid var(--zk-note-border);
+  border-left: 3px solid var(--zk-note-border);
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+/* Inner panels (inputs, textareas, view-source pre) inside a tinted
+   note modal. We darken the card's bg slightly via color-mix so the
+   panel reads as "deeper" but stays within the same color family.
+   Falls back to default sage-muted if --zk-note-bg isn't set
+   (e.g. on default cards or older browsers). */
+.zk-note-panel {
+  background-color: color-mix(
+    in srgb,
+    var(--zk-note-bg, #ffffff) 80%,
+    #1a1c19 20%
+  );
+}
+.dark .zk-note-panel {
+  /* In dark mode, mix toward white slightly to make the panel
+     stand out as "raised" against the deeper card surface. */
+  background-color: color-mix(
+    in srgb,
+    var(--zk-note-bg, #2d2e31) 75%,
+    #ffffff 8%
+  );
+}
+
+/* Pin/star/category badges that sit on note cards need a ring color
+   that matches whatever surface the card uses. Reading the card's
+   own CSS variable means the ring blends with both colored cards
+   AND respects light/dark mode automatically. */
+.zk-note-pin-ring {
+  border-color: var(--zk-note-bg, #ffffff);
+}
+
+/* ============================================================
+   CATEGORY BADGES — MD3 SECONDARY CONTAINER PAIRINGS
+
+   Problem: Light pastel badges (e.g. bg-rose-100) lose contrast
+   when the parent card is also pastel-tinted via per-note color.
+   And translucent dark badges (bg-rose-900/20) bleach through
+   colored dark cards.
+
+   Solution: Each category gets a SOLID, opaque container color
+   (MD3 "secondary container" tone), paired with on-container text
+   that passes WCAG AA (4.5:1) against that container — independent
+   of any parent surface. Plus a subtle inner border for definition
+   on similarly-toned cards.
+   ============================================================ */
+.zk-cat-pill {
+  /* Universal styling: subtle inset shadow gives the pill its own
+     edge against any parent, even similarly-colored ones. */
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 1px 1px rgba(0, 0, 0, 0.02);
+}
+.dark .zk-cat-pill {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* Task — sage */
+.zk-cat-task {
+  background-color: #c5e0c8;
+  color: #1f3a26;
+}
+.dark .zk-cat-task {
+  background-color: #6b8f72;
+  color: #0f1f13;
+}
+
+/* Idea — amber */
+.zk-cat-idea {
+  background-color: #fce39a;
+  color: #5b3700;
+}
+.dark .zk-cat-idea {
+  background-color: #d4a13a;
+  color: #1f1300;
+}
+
+/* Credential — rose */
+.zk-cat-credential {
+  background-color: #fbc5c0;
+  color: #7a1d2a;
+}
+.dark .zk-cat-credential {
+  background-color: #d97a82;
+  color: #2a0a10;
+}
+
+/* Web — sky */
+.zk-cat-web {
+  background-color: #b8dcf2;
+  color: #0c4a6e;
+}
+.dark .zk-cat-web {
+  background-color: #6aa3c7;
+  color: #061a2a;
+}
+
+/* Personal — violet */
+.zk-cat-personal {
+  background-color: #d4c8f0;
+  color: #3a1d6e;
+}
+.dark .zk-cat-personal {
+  background-color: #9a85c7;
+  color: #170a30;
+}
+
+/* Other / Uncategorized — neutral */
+.zk-cat-other {
+  background-color: #d8dcd5;
+  color: #3a4540;
+}
+.dark .zk-cat-other {
+  background-color: #5a6660;
+  color: #0f1413;
+}
+
+/* ============================================================
+   FLOATING ACTION BUTTON (FAB)
+
+   Light mode: deep sage primary (#4f6354).
+   Dark mode: brighter "primary container" tone — MD3 recommends
+   higher chroma on dark surfaces so the FAB pops against the
+   #202124 background.
+   ============================================================ */
+.zk-fab {
+  background-color: #4f6354;
+  box-shadow:
+    0 8px 24px rgba(79, 99, 84, 0.35),
+    0 0 0 1px rgba(79, 99, 84, 0.15);
+  transition:
+    background-color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+.dark .zk-fab {
+  background-color: #a8d4ae;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(168, 212, 174, 0.2);
+}
+.zk-fab:hover {
+  background-color: #3a4d3e;
+}
+.dark .zk-fab:hover {
+  background-color: #b8e3be;
+}
+
+/* ============================================================
+   THEME TOGGLE — View Transitions API (MD3 cross-fade)
+
+   When toggleTheme() runs, the View Transitions API takes a snapshot
+   of the old UI, applies the new theme, then cross-fades. We tune
+   the duration here. Browsers without support skip this entirely.
+   ============================================================ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(
+    0.2,
+    0,
+    0,
+    1
+  ); /* MD3 standard easing */
+}
+::view-transition-old(root) {
+  animation-name: zk-fade-out;
+}
+::view-transition-new(root) {
+  animation-name: zk-fade-in;
+}
+@keyframes zk-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes zk-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   BLOCK EDITOR (TipTap)
+   The .zk-block-editor class wraps the EditorContent surface.
+   Provides typography parity with the read-mode markdown body,
+   plus editor-specific affordances (placeholder, selection styling,
+   task list checkboxes).
+   ============================================================ */
+
+.zk-block-editor {
+  /* Top padding so the first block (or placeholder) sits with
+     breathing room below the title. */
+  padding-top: 16px;
+  font-family: var(--font-sans), 'Manrope', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-text, #1A1C19);
+}
+.dark .zk-block-editor {
+  color: var(--color-text-dark, #e8eaed);
+}
+.zk-block-editor > *:first-child { margin-top: 0; }
+
+/* Headings — Fraunces serif, matches the markdown render path. */
+.zk-block-editor h1,
+.zk-block-editor h2,
+.zk-block-editor h3 {
+  font-family: var(--font-display), 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+}
+.zk-block-editor h1 { font-size: 1.6rem; }
+.zk-block-editor h2 { font-size: 1.3rem; }
+.zk-block-editor h3 { font-size: 1.1rem; }
+
+/* Paragraphs — tight line-height, generous between blocks */
+.zk-block-editor p {
+  margin: 0 0 1rem;
+}
+.zk-block-editor p:last-child { margin-bottom: 0; }
+
+/* Bold and italic with subtle sage tint */
+.zk-block-editor strong { color: #2d5a44; font-weight: 700; }
+.dark .zk-block-editor strong { color: #a8d0b0; }
+.zk-block-editor em {
+  font-family: var(--font-display), 'Fraunces', Georgia, serif;
+  font-style: italic;
+  color: #2d5a44;
+}
+.dark .zk-block-editor em { color: #a8d0b0; }
+
+/* Inline code chip */
+.zk-block-editor code {
+  background: rgba(45, 90, 68, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.92em;
+  color: #2d5a44;
+}
+.dark .zk-block-editor code {
+  background: rgba(168, 208, 176, 0.15);
+  color: #a8d0b0;
+}
+
+/* Links */
+.zk-block-editor a {
+  color: #2d5a44;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.zk-block-editor a:hover { color: #1f4534; }
+.dark .zk-block-editor a { color: #a8d0b0; }
+.dark .zk-block-editor a:hover { color: #d4e8d8; }
+
+/* Lists */
+.zk-block-editor ul,
+.zk-block-editor ol {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.5rem;
+}
+.zk-block-editor ul { list-style: disc; }
+.zk-block-editor ol { list-style: decimal; }
+.zk-block-editor li { margin: 0.25rem 0; }
+.zk-block-editor li > p { margin: 0; }
+
+/* Task list (checkboxes) */
+.zk-block-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.zk-block-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.zk-block-editor ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.zk-block-editor ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+.zk-block-editor ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: #1f4534;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  /* Ensure the checkbox border is visible on colored note
+     backgrounds (e.g. green/mint tints where the browser's
+     default gray border disappears). We use outline instead of
+     border because checkbox styling is constrained by the
+     browser; outline always renders on top regardless of
+     appearance. */
+  outline: 1.5px solid rgba(31, 69, 52, 0.35);
+  outline-offset: -1px;
+  border-radius: 3px;
+}
+.dark .zk-block-editor ul[data-type="taskList"] input[type="checkbox"] {
+  outline-color: rgba(168, 208, 176, 0.4);
+}
+
+/* Also fix checkboxes in view mode (markdown-rendered checklists).
+   These are rendered as custom divs by the markdownComponents, but
+   on colored notes the green circle blends in. */
+.markdown-body .zakar-checkbox-unchecked {
+  border: 2px solid rgba(31, 69, 52, 0.4) !important;
+}
+.dark .markdown-body .zakar-checkbox-unchecked {
+  border-color: rgba(168, 208, 176, 0.5) !important;
+}
+
+/* Blockquote */
+.zk-block-editor blockquote {
+  border-left: 3px solid #2d5a44;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: rgba(26, 28, 25, 0.75);
+  font-style: italic;
+}
+.dark .zk-block-editor blockquote { color: rgba(232, 234, 237, 0.75); }
+
+/* Code block */
+.zk-block-editor pre {
+  background: #1a1f1c;
+  color: #e8eaed;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.zk-block-editor pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* Placeholder — shown when editor is empty.
+   TipTap's Placeholder extension renders this as a ::before
+   pseudo-element on empty paragraphs with class is-editor-empty. */
+.zk-block-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgba(107, 116, 111, 0.6);
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+.dark .zk-block-editor p.is-editor-empty:first-child::before {
+  color: rgba(154, 163, 157, 0.6);
+}
+
+/* Selection styling — sage tint matches brand */
+.zk-block-editor ::selection {
+  background: rgba(45, 90, 68, 0.18);
+}
+.dark .zk-block-editor ::selection {
+  background: rgba(168, 208, 176, 0.25);
+}
+
+/* ============================================================
+   BUBBLE MENU (TipTap selection toolbar)
+   The floating dark pill that appears above selected text.
+   ============================================================ */
+
+.zk-bubble-menu {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #2e3431;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  font-family: var(--font-sans), 'Manrope', sans-serif;
+  user-select: none;
+  z-index: 60;
+}
+
+.zk-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: none;
+  background: transparent;
+  color: #c4c9c6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  font-size: 13px;
+  font-weight: 500;
+}
+.zk-bubble-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+.zk-bubble-btn.is-active {
+  background: #2d5a44;
+  color: #ffffff;
+}
+
+.zk-bubble-link-panel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  min-width: 240px;
+}
+.zk-bubble-link-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 13px;
+  padding: 6px 8px;
+  height: 28px;
+  font-family: inherit;
+}
+.zk-bubble-link-input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.zk-bubble-link-apply {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #2d5a44;
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.12s;
+}
+.zk-bubble-link-apply:hover { background: #1f4534; }
+
+.zk-bubble-color-panel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.zk-bubble-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.zk-bubble-swatch:hover { transform: scale(1.15); }
+.zk-bubble-swatch-x {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ============================================================
+   SLASH MENU (TipTap block insertion menu)
+   Pops up when user types `/` in the editor.
+   ============================================================ */
+
+.zk-slash-menu {
+  background: #fffdf8;
+  border: 1px solid rgba(45, 90, 68, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(45, 90, 68, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  padding: 8px 0;
+  min-width: 280px;
+  max-height: 360px;
+  overflow-y: auto;
+  font-family: var(--font-sans), 'Manrope', sans-serif;
+  z-index: 70;
+}
+.dark .zk-slash-menu {
+  background: #2d2e31;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.zk-slash-menu-header {
+  padding: 6px 16px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(107, 116, 111, 0.7);
+  font-family: var(--font-mono), monospace;
+  border-bottom: 1px solid rgba(45, 90, 68, 0.06);
+  margin-bottom: 4px;
+}
+.dark .zk-slash-menu-header {
+  color: rgba(154, 163, 157, 0.7);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+.zk-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 16px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  transition: background 0.1s;
+  font-family: inherit;
+}
+.zk-slash-item:hover,
+.zk-slash-item.is-selected {
+  background: #e8f3ee;
+}
+.dark .zk-slash-item:hover,
+.dark .zk-slash-item.is-selected {
+  background: rgba(45, 90, 68, 0.35);
+}
+.zk-slash-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(45, 90, 68, 0.08);
+  color: #2d5a44;
+  flex-shrink: 0;
+}
+.dark .zk-slash-icon {
+  background: rgba(168, 208, 176, 0.15);
+  color: #a8d0b0;
+}
+.zk-slash-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.zk-slash-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A1C19;
+  line-height: 1.2;
+}
+.dark .zk-slash-name { color: #e8eaed; }
+.zk-slash-desc {
+  font-size: 12px;
+  color: rgba(107, 116, 111, 0.85);
+  line-height: 1.3;
+  /* Push description down a bit so it doesn't crowd the title.
+     Previous CSS targeted a non-existent class so title and
+     description rendered inline like "HeadingA section divider". */
+  margin-top: 2px;
+}
+.dark .zk-slash-desc { color: rgba(154, 163, 157, 0.9); }
+.zk-slash-shortcut {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2d5a44;
+  padding: 3px 8px;
+  background: #e2efe5;
+  border: 1px solid rgba(45, 90, 68, 0.18);
+  border-radius: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(45, 90, 68, 0.08);
+  letter-spacing: 0.02em;
+}
+.dark .zk-slash-shortcut {
+  color: #a8d0b0;
+  background: rgba(143, 184, 154, 0.16);
+  border-color: rgba(143, 184, 154, 0.28);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* ============================================================
+   COLORED NOTE READABILITY OVERRIDES
+   When a note has a non-default (colored) background, the meta
+   line text (date, read time), category badge, header icons need
+   stronger contrast than the default faint gray that works on
+   white. We use rgba black/white so the color mixes naturally
+   with whatever pastel sits behind, reading as a tinted dark
+   regardless of the specific bg color.
+   ============================================================ */
+
+/* Meta line text (read time, todos count, dot separators) inside
+   colored note cards — switch from the default light-gray faint to
+   a darker, more readable shade. */
+.zk-note-card:not(.zk-note-bg-default) .zk-text-faint {
+  color: rgba(20, 28, 24, 0.55);
+}
+.dark .zk-note-card:not(.zk-note-bg-default) .zk-text-faint {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Header icons (share, edit, star, lock, copy, archive, X) inside
+   colored note cards — bump from light gray to a darker shade so
+   they're clearly visible against pastel backgrounds. Targets
+   buttons inside the note card that use the standard chrome
+   text colors. */
+.zk-note-card:not(.zk-note-bg-default) .zk-text-secondary,
+.zk-note-card:not(.zk-note-bg-default) .zk-text-muted {
+  color: rgba(20, 28, 24, 0.65);
+}
+.dark .zk-note-card:not(.zk-note-bg-default) .zk-text-secondary,
+.dark .zk-note-card:not(.zk-note-bg-default) .zk-text-muted {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Hover on header icons — bump further so the affordance is clear */
+.zk-note-card:not(.zk-note-bg-default) button:hover .zk-text-secondary,
+.zk-note-card:not(.zk-note-bg-default) button:hover .zk-text-muted {
+  color: rgba(20, 28, 24, 0.85);
+}
+.dark .zk-note-card:not(.zk-note-bg-default) button:hover .zk-text-secondary,
+.dark .zk-note-card:not(.zk-note-bg-default) button:hover .zk-text-muted {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Category badge — when the badge background is the same hue family
+   as the note bg, the badge becomes invisible. Add a subtle dark
+   outline ring + darker text inside colored notes to disambiguate
+   it. The original badge colors (mint/sage for Task, blue for Web,
+   etc.) still come through but with a clearer edge. */
+.zk-note-card:not(.zk-note-bg-default) [data-cat-badge] {
+  background-color: rgba(255, 255, 255, 0.7);
+  color: rgba(20, 28, 24, 0.85);
+  box-shadow: 0 0 0 1px rgba(20, 28, 24, 0.08);
+}
+.dark .zk-note-card:not(.zk-note-bg-default) [data-cat-badge] {
+  background-color: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
