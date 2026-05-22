@@ -1,5 +1,28 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+// Prism — syntax highlighting for code blocks in note preview /
+// shared notes. We load the core + the languages we expect to see
+// most often in user notes. Prism is small (~5KB core) so loading
+// these languages eagerly is fine; lazy-loading them would add
+// flicker on first render.
+import Prism from "prismjs";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
+import "prismjs/components/prism-python";
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-yaml";
+import "prismjs/components/prism-markup"; // HTML
+import "prismjs/components/prism-css";
+import "prismjs/components/prism-sql";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-rust";
+import "prismjs/components/prism-java";
+import "prismjs/components/prism-php";
+import "prismjs/components/prism-ruby";
+import "prismjs/components/prism-markdown";
 import {
   Plus,
   Search,
@@ -840,6 +863,89 @@ const detectSensitiveData = (content: string): boolean => {
   return false;
 };
 
+/**
+ * Client-side fallback to mask sensitive values in a note's content.
+ * Used when the AI didn't generate a maskedContent field, so the
+ * Reveal/Hide toggle has *something* to switch between. We mask:
+ *   - Lines that contain a credential keyword (password, secret,
+ *     api_key, ...) followed by a colon/equals/dash separator
+ *     and a value — the value after the separator gets redacted.
+ *   - Standalone strong patterns (JWT, known API key formats).
+ * Other lines are left untouched.
+ */
+const maskSensitiveData = (content: string): string => {
+  if (!content) return content;
+  const credentialKeywords = [
+    "password",
+    "pwd",
+    "passphrase",
+    "secret",
+    "api_key",
+    "apikey",
+    "api key",
+    "access token",
+    "auth token",
+    "authentication token",
+    "private key",
+    "secret key",
+    "credentials",
+    "credential",
+    "cvv",
+    "pin code",
+    "pin",
+  ];
+
+  const maskValue = (v: string): string => {
+    const trimmed = v.trim();
+    if (!trimmed) return v;
+    // Keep first 2 + last 2 chars for very long values (gives
+    // a hint that the value IS there), otherwise fully mask.
+    if (trimmed.length > 8) {
+      return `${trimmed.slice(0, 2)}${"•".repeat(8)}${trimmed.slice(-2)}`;
+    }
+    return "•".repeat(Math.max(6, trimmed.length));
+  };
+
+  return content
+    .split("\n")
+    .map((line) => {
+      const lower = line.toLowerCase();
+      // Check if this line has a credential keyword + separator
+      // (colon, equals, dash) followed by a value. This pattern
+      // matches "Password: abc123", "API_KEY = xyz", "Secret - foo".
+      const hasCredentialPattern = credentialKeywords.some((kw) => {
+        // Build a regex that looks for the keyword followed by
+        // optional whitespace, a separator, and then a value.
+        const pattern = new RegExp(
+          `\\b${kw.replace(/\s+/g, "[\\s_-]*")}\\s*[:=\\-]\\s*.+`,
+          "i",
+        );
+        return pattern.test(line);
+      });
+
+      if (hasCredentialPattern) {
+        // Mask everything AFTER the first colon/equals/dash.
+        // Handle bullet points (•, *, -) and numbered lists at
+        // the start of the line.
+        return line.replace(
+          /^(\s*[•\-*]?\s*[^:=\-\n]+\s*[:=\-]\s*)(.+)$/,
+          (_m, prefix, value) => `${prefix}${maskValue(value)}`,
+        );
+      }
+
+      // No credential keyword — mask only standalone strong patterns
+      return line
+        .replace(/AIza[0-9A-Za-z\-_]{35}/g, "[REDACTED]")
+        .replace(/sk-[a-zA-Z0-9]{20,}/g, "[REDACTED]")
+        .replace(/gh[oprs]_[a-zA-Z0-9]{36}/g, "[REDACTED]")
+        .replace(
+          /ey[a-zA-Z0-9\-_]+\.ey[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g,
+          "[REDACTED]",
+        );
+    })
+    .join("\n");
+};
+
 // Client-side category detection for real-time "smart trigger" feedback
 const detectCategory = (
   content: string,
@@ -1185,7 +1291,7 @@ function CardBodyText({
   return (
     <p
       className={cn(
-        "text-[#6b746f] dark:zk-text-muted leading-relaxed text-[13px] whitespace-pre-line",
+        "text-[#6b746f] dark:text-[#d4d8d3] leading-relaxed text-[13px] whitespace-pre-line",
         // Standard cards clamp to 8 lines so they stay roughly comparable
         // across the grid. Expanded cards drop the clamp entirely so they
         // can grow into a column-bottom gap. Cap at 32 lines so we never
@@ -1719,7 +1825,7 @@ function TodaysFocus({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 4, scale: 0.97 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="group flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#2d2e31] rounded-xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.12] transition-all cursor-pointer"
+                  className="group flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#282929] rounded-xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.12] transition-all cursor-pointer"
                   onClick={(e) => {
                     // Don't open the note if they clicked a button
                     if ((e.target as HTMLElement).closest("button")) return;
@@ -1997,7 +2103,7 @@ function RelatedNotes({
             <button
               key={note.id}
               onClick={() => onSelect(note)}
-              className="w-full text-left group flex items-start gap-3 p-3 bg-white dark:bg-[#2d2e31] rounded-xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.14] transition-all active:scale-[0.99]"
+              className="w-full text-left group flex items-start gap-3 p-3 bg-white dark:bg-[#282929] rounded-xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.14] transition-all active:scale-[0.99]"
             >
               <div className="flex-1 min-w-0">
                 <p
@@ -2218,7 +2324,7 @@ function WhereLeftOff({
 
       <button
         onClick={() => onOpenNote(candidate)}
-        className="w-full text-left group flex flex-col gap-2 px-5 py-4 bg-white dark:bg-[#2d2e31] rounded-2xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.14] hover:shadow-md dark:hover:shadow-none transition-all active:scale-[0.99]"
+        className="w-full text-left group flex flex-col gap-2 px-5 py-4 bg-white dark:bg-[#282929] rounded-2xl border border-[#dde5da] dark:border-white/[0.06] hover:border-[#2d5a44]/30 dark:hover:border-white/[0.14] hover:shadow-md dark:hover:shadow-none transition-all active:scale-[0.99]"
       >
         <div className="flex items-start justify-between gap-3">
           <p
@@ -2468,7 +2574,7 @@ function Flashback({
         </button>
       </div>
 
-      <div className="bg-white dark:bg-[#2d2e31] rounded-2xl border border-amber-200/40 dark:border-amber-500/15 overflow-hidden">
+      <div className="bg-white dark:bg-[#282929] rounded-2xl border border-amber-200/40 dark:border-amber-500/15 overflow-hidden">
         <button
           onClick={() => onOpenNote(candidate)}
           className="block w-full text-left px-5 pt-4 pb-3 hover:bg-amber-50/30 dark:hover:bg-amber-500/[0.04] transition-colors"
@@ -2516,6 +2622,242 @@ function Flashback({
         </div>
       </div>
     </motion.section>
+  );
+}
+
+/**
+ * Copy button for code blocks. Lives outside the main App
+ * component so it has its own local state — each instance manages
+ * its own "copied!" feedback independently. Stateless / pure
+ * presentational, talks to navigator.clipboard via the standard
+ * async API with a sync execCommand fallback for older browsers.
+ */
+function ZkCodeCopyButton({
+  text,
+  variant = "default",
+}: {
+  text: string;
+  variant?: "default" | "header";
+}) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for very old browsers without the async API.
+        // execCommand is deprecated but still functional everywhere
+        // that lacks navigator.clipboard.
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard permission denied or some other failure — leave
+      // the button quiet rather than throwing a visible error.
+    }
+  };
+  if (variant === "header") {
+    // Header variant — matches the reference: a small pill button
+    // with just an icon (no "Copy Code" label — the icon is
+    // universally understood and the bar is tight on space).
+    // Theme-aware (sage in light, sage-tinted on slate in dark).
+    // Sits in the code block's header strip so it's always
+    // visible without hover.
+    return (
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="zk-code-copy-btn flex items-center justify-center w-7 h-7 rounded-md active:scale-90 transition-all"
+        style={{ fontFamily: "var(--font-sans)" }}
+        aria-label="Copy code"
+        title="Copy code"
+      >
+        {copied ? (
+          <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+        ) : (
+          <Copy className="w-3.5 h-3.5" />
+        )}
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+      style={{ fontFamily: "var(--font-sans)" }}
+      aria-label="Copy code"
+      title="Copy code"
+    >
+      {copied ? (
+        <>
+          <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-emerald-400">Copied</span>
+        </>
+      ) : (
+        <>
+          <Copy className="w-3.5 h-3.5" />
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Syntax-highlighted code block. Matches the reference design:
+ * deep ink surface (both light/dark theme since code = dark UI by
+ * convention), language label top-left, line numbers down the
+ * gutter, copy button top-right. Heuristically auto-detects the
+ * language if the markdown didn't specify one.
+ */
+function ZkCodeBlock({
+  code,
+  language,
+}: {
+  code: string;
+  language?: string | null;
+}) {
+  // Heuristic language detection when nothing was specified.
+  const detectedLang = (() => {
+    if (language) return language.toLowerCase();
+    const c = code;
+    if (/^\s*(def |import |from \w+ import|class \w+\(|print\()/m.test(c))
+      return "python";
+    if (/^\s*(function |const |let |var |=>)/m.test(c)) return "javascript";
+    if (/^\s*(interface |type \w+ =|export (interface|type))/m.test(c))
+      return "typescript";
+    if (/^\s*(#!\/|echo |export [A-Z_]+=)/m.test(c)) return "bash";
+    if (/^\s*\{[\s\S]*"[a-zA-Z_]+"\s*:/.test(c)) return "json";
+    if (/^\s*(<\?php|\$\w+\s*=)/m.test(c)) return "php";
+    if (/^\s*(package main|fmt\.Print|func \w+)/m.test(c)) return "go";
+    if (/^\s*(fn \w+|let mut |use std::)/m.test(c)) return "rust";
+    if (/^\s*<\/?[a-zA-Z]+/.test(c)) return "markup";
+    return "text";
+  })();
+
+  // Friendly display name for the header.
+  const displayLang = (() => {
+    const m: Record<string, string> = {
+      js: "JavaScript",
+      javascript: "JavaScript",
+      jsx: "JSX",
+      ts: "TypeScript",
+      typescript: "TypeScript",
+      tsx: "TSX",
+      py: "Python",
+      python: "Python",
+      rb: "Ruby",
+      ruby: "Ruby",
+      go: "Go",
+      rs: "Rust",
+      rust: "Rust",
+      java: "Java",
+      kt: "Kotlin",
+      swift: "Swift",
+      c: "C",
+      cpp: "C++",
+      cs: "C#",
+      php: "PHP",
+      html: "HTML",
+      markup: "HTML",
+      css: "CSS",
+      scss: "SCSS",
+      json: "JSON",
+      yaml: "YAML",
+      yml: "YAML",
+      xml: "XML",
+      sh: "Shell",
+      bash: "Bash",
+      zsh: "Zsh",
+      sql: "SQL",
+      md: "Markdown",
+      markdown: "Markdown",
+      text: "Code",
+    };
+    return m[detectedLang] || detectedLang;
+  })();
+
+  // Prism-highlight the code. Wrap in try so unknown language
+  // (or load failure) falls back to plain text without crashing.
+  const highlightedHtml = (() => {
+    try {
+      const grammar =
+        (Prism.languages as any)[detectedLang] || Prism.languages.markup;
+      return Prism.highlight(code, grammar, detectedLang);
+    } catch {
+      // Plain text fallback. Escape HTML so the raw code isn't
+      // interpreted as markup when injected via innerHTML.
+      return code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+  })();
+
+  // Split lines for the line-number gutter. We render line numbers
+  // as a separate column rather than via CSS counters because
+  // counters don't play nicely with html2canvas on PDF export.
+  const lineCount = code.split("\n").length;
+  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+
+  return (
+    <div
+      className="zk-code-block my-5 group relative rounded-2xl overflow-hidden shadow-sm"
+    >
+      {/* Header row — language label + copy button. Theme-adaptive
+          surface and divider. No green tint anywhere; we use slate /
+          off-white tones so the block reads as "code editor" and
+          doesn't compete with the editorial sage palette of the
+          note body. */}
+      <div className="zk-code-block-header flex items-center justify-between px-5 pt-3.5 pb-2.5">
+        <span
+          className="zk-code-block-lang text-[12.5px] font-semibold select-none tracking-wide"
+          style={{ fontFamily: "var(--font-sans)" }}
+        >
+          {displayLang}{displayLang === "Code" ? "" : " Snippet"}
+        </span>
+        <ZkCodeCopyButton text={code} variant="header" />
+      </div>
+      <div className="zk-code-block-body flex font-mono text-[13.5px] leading-[1.7] overflow-x-auto">
+        {/* Line-number gutter */}
+        <div
+          className="zk-code-block-gutter select-none flex-shrink-0 text-right pl-5 pr-4 py-4"
+          style={{
+            fontFamily:
+              "'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace",
+          }}
+          aria-hidden="true"
+        >
+          {lineNumbers.map((n) => (
+            <div key={`ln-${n}`}>{n}</div>
+          ))}
+        </div>
+        {/* Code body */}
+        <pre
+          className="zk-code-block-pre m-0 py-4 pr-5 flex-1 min-w-0 whitespace-pre"
+          style={{
+            fontFamily:
+              "'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace",
+            tabSize: 2,
+            background: "transparent",
+          }}
+        >
+          <code
+            className={`language-${detectedLang}`}
+            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+          />
+        </pre>
+      </div>
+    </div>
   );
 }
 
@@ -2858,6 +3200,28 @@ export default function App() {
     return !!params.get("share");
   });
   const [isSharing, setIsSharing] = useState(false);
+  const shareDropdownRef = useRef<HTMLDivElement | null>(null);
+  // Close the share dropdown when the user clicks anywhere outside
+  // of it. Without this, the dropdown stays open after the user
+  // finishes copying the link / toggling visibility — which traps
+  // them with a panel they can't dismiss unless they click the
+  // share icon again. The listener self-attaches only while the
+  // dropdown is open to avoid running on every click app-wide.
+  useEffect(() => {
+    if (!isSharing) return;
+    const handle = (e: MouseEvent) => {
+      const el = shareDropdownRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setIsSharing(false);
+      }
+    };
+    // Use mousedown rather than click so the dropdown closes
+    // *before* the underlying element fires its own click —
+    // matches how every other "click outside to close" panel
+    // (color picker, more menu, slash menu) behaves.
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [isSharing]);
   const [pendingShare, setPendingShare] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [showCaptureModal, setShowCaptureModal] = useState(false);
@@ -3052,6 +3416,23 @@ export default function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   // Per-note color picker dropdown — open/closed
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement | null>(null);
+  // Close color picker when user clicks outside, mirroring the
+  // share-card behaviour. Without this users get stuck looking
+  // at a panel they can't dismiss without finding the palette
+  // icon again — annoying on a colored note where the palette
+  // icon blends into the surface.
+  useEffect(() => {
+    if (!isColorPickerOpen) return;
+    const handle = (e: MouseEvent) => {
+      const el = colorPickerRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setIsColorPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [isColorPickerOpen]);
   /** Action overflow menu — consolidates secondary actions (color,
    *  lock, copy, share, star, edit, trash) into one ⋯ dropdown so the
    *  top-right action row stays clean and never wraps. Primary
@@ -4293,7 +4674,7 @@ export default function App() {
       if (inline) {
         return (
           <code
-            className="font-mono text-[0.9em] px-1.5 py-0.5 rounded bg-[#f4f7f2] dark:bg-[#2d2e31] text-[#1f4534] dark:text-[#8fb89a] border border-[#dde5da]/60 dark:border-white/[0.05]"
+            className="font-mono text-[0.9em] px-1.5 py-0.5 rounded bg-[#f4f7f2] dark:bg-[#282929] text-[#1f4534] dark:text-[#8fb89a] border border-[#dde5da]/60 dark:border-white/[0.05]"
             style={{
               overflowWrap: "anywhere",
               wordBreak: "break-word",
@@ -4312,24 +4693,48 @@ export default function App() {
       );
     },
 
-    // Block code wrapper — theme-adaptive code surface. In light
-    // mode: subtle sage-tinted off-white that reads as "code" but
-    // doesn't fight the editorial layout. In dark mode: deep
-    // ink. Works on top of any colored note card because the
-    // background is opaque and the border keeps it distinct.
-    pre: ({ children, ...props }: any) => (
-      <pre
-        className="my-5 p-5 rounded-2xl bg-[#f4f7f2] dark:bg-[#0f1411] border border-[#dde5da] dark:border-[#2d5a44]/40 font-mono text-[13.5px] leading-[1.7] text-[#1f3a26] dark:text-[#dce5df] overflow-x-auto whitespace-pre shadow-inner [&>code]:bg-transparent [&>code]:border-0 [&>code]:p-0 [&>code]:text-inherit [&>code]:font-mono"
-        style={{
-          fontFamily:
-            "'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'Liberation Mono', monospace",
-          tabSize: 2,
-        }}
-        {...props}
-      >
-        {children}
-      </pre>
-    ),
+    // Block code wrapper — editorial dark surface matching the
+    // reference design: language label top-left, copy button
+    // top-right, deep ink background, mono font.
+    //
+    // Implementation notes:
+    //  • react-markdown passes the language via `node.properties`
+    //    on the child <code> element (className like
+    //    "language-javascript"). We dig into that to display the
+    //    label.
+    //  • The copy button extracts text via children traversal —
+    //    no DOM ref needed, since the children are React nodes we
+    //    can walk recursively.
+    //  • Dark surface in BOTH light/dark theme. Matches the
+    //    reference screenshot. Code is a dark UI affordance by
+    //    convention (terminals, code editors, etc) — keeping
+    //    it dark in light mode reads as intentional rather than
+    //    a theming bug.
+    pre: ({ children, ...props }: any) => {
+      // Extract language from the inner <code className="language-xxx">
+      let language: string | null = null;
+      const child: any = Array.isArray(children) ? children[0] : children;
+      if (child?.props?.className) {
+        const match = String(child.props.className).match(/language-(\w+)/);
+        if (match) {
+          language = match[1];
+        }
+      }
+      // Recursively pull plain text from children for copy-to-clipboard.
+      const extractText = (node: any): string => {
+        if (node == null || node === false) return "";
+        if (typeof node === "string" || typeof node === "number")
+          return String(node);
+        if (Array.isArray(node)) return node.map(extractText).join("");
+        if (node.props?.children) return extractText(node.props.children);
+        return "";
+      };
+      const codeText = extractText(children).replace(/\n$/, "");
+      // Render via the standalone ZkCodeBlock so it can do its own
+      // Prism syntax highlighting and detect the language if the
+      // markdown didn't specify one (heuristic on the code body).
+      return <ZkCodeBlock code={codeText} language={language} {...props} />;
+    },
 
     // Bold — sage-deep tint, slightly more weight for emphasis.
     strong: ({ children, ...props }: any) => (
@@ -4787,10 +5192,47 @@ export default function App() {
     })();
 
     let html = text
-      // Fenced code blocks (must be before inline processing)
-      .replace(/```[\s\S]*?```/g, (match) => {
-        const code = match.replace(/```\w*\n?/, "").replace(/\n?```$/, "");
-        return `<pre style="background:#f2f4f1;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;overflow-x:auto">${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+      // Fenced code blocks (must be before inline processing). We
+      // emit the SAME structured layout as the in-app ZkCodeBlock
+      // component — language label top-left, copy-icon-free header
+      // (PDFs don't need an interactive button), syntax-highlighted
+      // code body. This keeps PDF code blocks visually consistent
+      // with what the user sees on screen.
+      .replace(/```([a-zA-Z0-9_+-]*)?\n?([\s\S]*?)```/g, (_full, langRaw, body) => {
+        const lang = String(langRaw || "").toLowerCase();
+        // Friendly display label — keep in sync with ZkCodeBlock.
+        const labelMap: Record<string, string> = {
+          js: "JavaScript", javascript: "JavaScript",
+          ts: "TypeScript", typescript: "TypeScript",
+          jsx: "JSX", tsx: "TSX",
+          py: "Python", python: "Python",
+          rb: "Ruby", ruby: "Ruby",
+          go: "Go", rs: "Rust", rust: "Rust",
+          java: "Java", kt: "Kotlin", swift: "Swift",
+          c: "C", cpp: "C++", cs: "C#",
+          php: "PHP", html: "HTML", markup: "HTML",
+          css: "CSS", scss: "SCSS",
+          json: "JSON", yaml: "YAML", yml: "YAML", xml: "XML",
+          sh: "Shell", bash: "Bash", zsh: "Zsh",
+          sql: "SQL", md: "Markdown", markdown: "Markdown",
+        };
+        const label = labelMap[lang] || (lang ? lang : "Code");
+        const raw = String(body).replace(/^\n/, "").replace(/\n$/, "");
+        // Prism highlighting if we have a grammar for this lang.
+        let highlighted: string;
+        try {
+          const grammar = (Prism.languages as any)[lang] || Prism.languages.markup;
+          highlighted = Prism.highlight(raw, grammar, lang || "markup");
+        } catch {
+          // Fall back to escaped plain text on unknown languages.
+          highlighted = raw
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        }
+        // The styling lives in the .zpdf-render .zpdf-code-block-*
+        // rules — see the PDF stylesheet block below.
+        return `<div class="zpdf-code-block"><div class="zpdf-code-block-header"><span class="zpdf-code-block-lang">${label}</span></div><pre class="zpdf-code-block-body"><code class="language-${lang || 'markup'}">${highlighted}</code></pre></div>`;
       })
       // Headings (with or without space after #)
       .replace(
@@ -4880,7 +5322,7 @@ export default function App() {
           // Open the checklist card. Padding + rounded edges + thin border
           // matches the in-app checklist look.
           result +=
-            '<div class="zpdf-checklist" style="margin:14px 0;padding:18px 22px;border:1px solid #e5e9e5;border-radius:14px;background:#ffffff">';
+            '<div class="zpdf-checklist" style="margin:14px 0;padding:4px 0;background:transparent">';
           inChecklist = true;
         }
         // Strikethrough that's bulletproof under html2canvas: insert a
@@ -4915,13 +5357,13 @@ export default function App() {
         // Use flex layout with align-items:flex-start so the row grows
         // when text wraps — fixed-height was clipping multi-line items
         // on top of each other.
-        result += `<div style="display:flex;align-items:flex-start;gap:12px;padding:6px 0">
-          <div style="flex-shrink:0;width:18px;height:18px;margin-top:5px;border-radius:50%;background:#506455;line-height:0">
+        result += `<div style="display:flex;align-items:flex-start;gap:12px;padding:4px 0">
+          <div style="flex-shrink:0;width:18px;height:18px;margin-top:2px;border-radius:50%;background:#506455;line-height:0">
             <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" style="display:block">
               <path d="M5 9.2 L7.8 12 L13 6.8" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
             </svg>
           </div>
-          <span style="flex:1;color:#9aaa9f;line-height:1.6">${strikeText}</span>
+          <span style="flex:1;color:#9aaa9f;line-height:1.55">${strikeText}</span>
         </div>`;
         continue;
       }
@@ -4940,12 +5382,12 @@ export default function App() {
         }
         if (!inChecklist) {
           result +=
-            '<div class="zpdf-checklist" style="margin:14px 0;padding:18px 22px;border:1px solid #e5e9e5;border-radius:14px;background:#ffffff">';
+            '<div class="zpdf-checklist" style="margin:14px 0;padding:4px 0;background:transparent">';
           inChecklist = true;
         }
-        result += `<div style="display:flex;align-items:flex-start;gap:12px;padding:6px 0">
-          <div style="flex-shrink:0;width:18px;height:18px;margin-top:5px;border-radius:50%;border:2px solid #aeb3af;background:#ffffff;box-sizing:border-box"></div>
-          <span style="flex:1;color:#1a1c19;line-height:1.6">${uncheckedMatch[2]}</span>
+        result += `<div style="display:flex;align-items:flex-start;gap:12px;padding:4px 0">
+          <div style="flex-shrink:0;width:18px;height:18px;margin-top:2px;border-radius:50%;border:2px solid #aeb3af;background:#ffffff;box-sizing:border-box"></div>
+          <span style="flex:1;color:#1a1c19;line-height:1.55">${uncheckedMatch[2]}</span>
         </div>`;
         continue;
       }
@@ -4998,7 +5440,7 @@ export default function App() {
           result += '<ul style="padding-left:20px;margin:4px 0;list-style:none">';
           inUl = true;
         }
-        result += `<li style="margin:2px 0">${ulMatch[2]}</li>`;
+        result += `<li style="margin:2px 0"><span class="zpdf-li-text">${ulMatch[2]}</span></li>`;
         continue;
       }
 
@@ -5013,11 +5455,58 @@ export default function App() {
           result += '<ol style="padding-left:20px;margin:4px 0">';
           inOl = true;
         }
-        result += `<li style="margin:2px 0">${olMatch[2]}</li>`;
+        result += `<li style="margin:2px 0"><span class="zpdf-li-text">${olMatch[2]}</span></li>`;
         continue;
       }
 
-      // Close open lists
+      // Skip if it's already an HTML tag (heading, hr, pre, blockquote).
+      // These shouldn't get sucked into a <li>, so close any open list first.
+      if (line.match(/^<(h[1-6]|hr|pre|blockquote)/)) {
+        if (inUl) {
+          result += "</ul>";
+          inUl = false;
+        }
+        if (inOl) {
+          result += "</ol>";
+          inOl = false;
+        }
+        result += line;
+        continue;
+      }
+
+      // Empty line → if we're inside a list and the NEXT non-empty
+      // line is also a list item, keep the list open (this is the
+      // user's intent — "* a\n\n* b" should be one list with two
+      // items, not two separate lists). Otherwise close the list
+      // and emit a <br>.
+      if (line.trim() === "") {
+        if (inUl || inOl) {
+          // Peek ahead for the next non-empty line.
+          let j = i + 1;
+          while (j < lines.length && lines[j].trim() === "") j++;
+          const next = j < lines.length ? lines[j] : "";
+          const nextIsListItem =
+            /^(\s*)[-*+]\s+/.test(next) || /^(\s*)\d+\.\s+/.test(next);
+          if (nextIsListItem) {
+            // Stay inside the current list — skip the blank line.
+            continue;
+          }
+          // Real paragraph break → close the list.
+          if (inUl) {
+            result += "</ul>";
+            inUl = false;
+          }
+          if (inOl) {
+            result += "</ol>";
+            inOl = false;
+          }
+        }
+        result += "<br>";
+        continue;
+      }
+
+      // Close open lists (we got here because the line isn't a list
+      // item, isn't empty, isn't a passthrough tag → it's prose).
       if (inUl) {
         result += "</ul>";
         inUl = false;
@@ -5025,18 +5514,6 @@ export default function App() {
       if (inOl) {
         result += "</ol>";
         inOl = false;
-      }
-
-      // Skip if it's already an HTML tag (heading, hr, pre, blockquote)
-      if (line.match(/^<(h[1-6]|hr|pre|blockquote)/)) {
-        result += line;
-        continue;
-      }
-
-      // Empty line → spacing
-      if (line.trim() === "") {
-        result += "<br>";
-        continue;
       }
 
       // Regular paragraph
@@ -5513,20 +5990,38 @@ export default function App() {
         // session doesn't undo the migration.
         if (legacyLocksClearedRef.current !== user.uid) {
           legacyLocksClearedRef.current = user.uid;
+          // Match ONLY truly legacy passwords — anything that isn't
+          // the literal string "locked" AND doesn't start with
+          // "locked:" (the new method-encoded format like
+          // "locked:biometric"). Without the second check, the
+          // migration would strip every new auto-lock fresh notes
+          // get the moment they're created — defeating the
+          // auto-lock feature entirely.
           const legacy = fetchedNotes.filter(
-            (n) => n.password && n.password !== "locked",
+            (n) =>
+              n.password &&
+              n.password !== "locked" &&
+              !n.password.startsWith("locked:"),
           );
           if (legacy.length > 0) {
             (async () => {
               try {
                 const batch = writeBatch(db);
                 legacy.forEach((n) => {
+                  // Only clear fields that actually exist in the
+                  // notes schema. Firestore security rules whitelist
+                  // updatable fields and reject any update that
+                  // includes unknown ones — `lockMethod` and
+                  // `lockedAt` were considered earlier but never
+                  // shipped (we encode the lock method inside the
+                  // `password` field as "locked:biometric" etc),
+                  // so attempting to write them caused
+                  // "Missing or insufficient permissions" errors
+                  // for every signed-in user.
                   batch.update(doc(db, "notes", n.id), {
                     password: null,
                     failedAttempts: 0,
                     lockedUntil: null,
-                    lockMethod: null,
-                    lockedAt: null,
                   });
                 });
                 await batch.commit();
@@ -5815,6 +6310,15 @@ export default function App() {
     setFormatType("auto");
     localStorage.removeItem("zakar_dump");
 
+    // If the user captured a new note while reading another one, close
+    // the open note so they can see their just-captured note appear at
+    // the top of the list. Without this, the new note is invisible
+    // behind the open-note overlay until the user manually closes it.
+    if (selectedNote) {
+      setSelectedNote(null);
+      setRevealSensitive(false);
+    }
+
     try {
       // Detect reminder intent from the raw dump BEFORE we save. The
       // parser is conservative — returns null unless the text contains
@@ -5856,6 +6360,42 @@ export default function App() {
         formatType: selectedFormat,
         ...(rawReminder ? { reminder: rawReminder } : {}),
         ...(newSortOrder !== undefined ? { sortOrder: newSortOrder } : {}),
+      });
+
+      // POST-CREATE VISIBILITY GUARANTEE — make absolutely sure the
+      // user can see their new note. Without these the new note can
+      // get hidden by an active category/starred filter, or buried
+      // by sort order, or be invisible because the user is currently
+      // looking at a previously-opened note that occupies the
+      // detail panel.
+      // 1. Close the currently-open detail view so the list is visible.
+      setSelectedNote(null);
+      // 2. Reset to the "All" view so a non-All filter doesn't hide
+      //    the new note (which has category "Other" until AI sorts it).
+      //    NOTE: the All view is represented by `activeCategory === null`,
+      //    not the literal string "All". Setting it to "All" would
+      //    make the filter try to match `note.category === "All"` which
+      //    is never true — leaving the user looking at an empty list
+      //    with "No all notes" heading (user-reported bug).
+      if (activeCategory !== null) {
+        setActiveCategory(null);
+      }
+      // 3. Scroll the notes list back to the top so the new card is
+      //    in viewport. We do this on a microtask so React has
+      //    flushed the setSelectedNote(null) re-render first.
+      Promise.resolve().then(() => {
+        try {
+          const scroller =
+            document.querySelector('[data-notes-scroll-region]') ||
+            window;
+          if (scroller === window) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            (scroller as HTMLElement).scrollTo({ top: 0, behavior: "smooth" });
+          }
+        } catch {
+          // non-fatal
+        }
       });
 
       // 2. Only sort if Magic Sort is enabled
@@ -8012,6 +8552,41 @@ export default function App() {
     }
     setSelectedNote(note);
     setEditTitle(note.title);
+
+    // Passive backfill — silently bring old notes up to current
+    // schema. When detection logic (or any other derive-from-content
+    // logic) improves, old notes don't automatically benefit because
+    // their stored fields were computed under the older rules. Here
+    // we re-derive every field that's a pure function of content +
+    // current code, and if it disagrees with what's stored, we
+    // write the corrected value back. The user sees no UI for this —
+    // it just means tomorrow's bug fix applies to yesterday's notes
+    // the moment they're opened.
+    //
+    // We DON'T touch fields the user can set themselves (tags,
+    // category if the user manually moved it, etc.) — only fields
+    // that are 100% derived from `content`.
+    try {
+      const currentHasSensitive = detectSensitiveData(note.content || "");
+      const updates: Record<string, unknown> = {};
+      if (
+        currentHasSensitive !== !!note.hasSensitiveData &&
+        currentHasSensitive
+      ) {
+        updates.hasSensitiveData = true;
+      }
+      if (Object.keys(updates).length > 0) {
+        // Fire-and-forget — no await, no error blocking. If the
+        // write fails (offline, rules glitch, doc gone) the next
+        // open will retry.
+        updateDoc(doc(db, "notes", note.id), updates).catch((err) => {
+          console.warn("[backfill] passive update skipped:", err);
+        });
+      }
+    } catch (err) {
+      console.warn("[backfill] detection failed:", err);
+    }
+
     // Edit the SORTED content (what the user sees in preview), not the
     // raw original. Editing the raw content would surprise users who
     // see one thing and expect to edit that. We deliberately preserve
@@ -8061,6 +8636,19 @@ export default function App() {
         // All other views: exclude trashed AND archived notes
         if (note.isTrashed) return false;
         if (note.isArchived) return false;
+
+        // ALWAYS show notes that are still processing, regardless of
+        // category filter. A newly-captured note arrives with
+        // status: "processing" before the AI has assigned a
+        // category. Without this carve-out, if the user has the
+        // "Task" or "Idea" filter active when they capture, their
+        // brand new note vanishes from the list (since its
+        // category hasn't been set yet) — leaving them thinking
+        // capture failed.
+        const isProcessing = note.status === "processing";
+        if (isProcessing) {
+          return matchesQuery(note, parsedSearchQuery);
+        }
 
         // Use the new full-text search engine instead of basic substring match.
         // matchesQuery handles plain terms, "exact phrases", tag:, #tag,
@@ -8729,7 +9317,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/60 dark:bg-[#2d2e31] border border-[#2d5a44]/15 dark:border-[#6b8f72]/25 backdrop-blur-sm">
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/60 dark:bg-[#282929] border border-[#2d5a44]/15 dark:border-[#6b8f72]/25 backdrop-blur-sm">
                 <div className="w-1.5 h-1.5 rounded-full zk-bg-primary dark:bg-[#8fb89a]" />
                 <span
                   className="text-[10px] font-bold tracking-widest zk-text-primary-brand dark:text-[#a8c9ac] uppercase"
@@ -9214,8 +9802,8 @@ export default function App() {
                         .zpdf-render .zpdf-brand { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 800; color: #1f4534; letter-spacing: -0.02em; }
                         .zpdf-render .zpdf-date { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #9aaa9f; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 700; }
                         .zpdf-render h1.zpdf-title { font-family: 'Nunito', Arial, Helvetica, sans-serif; font-size: 30px; font-weight: 800; line-height: 1.2; margin: 0 0 28px 0; color: #1a1c19; letter-spacing: -0.02em; }
-                        .zpdf-render .zpdf-content p { margin: 0 0 1em 0; }
-                        .zpdf-render .zpdf-content h1, .zpdf-render .zpdf-content h2, .zpdf-render .zpdf-content h3 { font-weight: 700; color: #1a1c19; margin: 1.2em 0 0.4em; }
+                        .zpdf-render .zpdf-content p { margin: 0 0 0.6em 0; }
+                        .zpdf-render .zpdf-content h1, .zpdf-render .zpdf-content h2, .zpdf-render .zpdf-content h3 { font-weight: 700; color: #1a1c19; margin: 0.4em 0 0.35em; }
                         .zpdf-render .zpdf-content h1 { font-size: 22px; }
                         .zpdf-render .zpdf-content h2 { font-size: 18px; }
                         .zpdf-render .zpdf-content h3 { font-size: 16px; }
@@ -9246,7 +9834,7 @@ export default function App() {
                           display: flex !important;
                           align-items: flex-start;
                           gap: 0.55em;
-                          margin: 0.2em 0 !important;
+                          margin: 0.1em 0 !important;
                           padding-left: 0.2em !important;
                           page-break-inside: avoid;
                           break-inside: avoid;
@@ -9255,48 +9843,64 @@ export default function App() {
                         /* Unordered list bullet — small sage disc.
                            To get it on the SAME LINE as the first
                            text baseline, we calibrate margin-top
-                           against the body line-height. With body
-                           15px @ 1.55, the cap-height midline is at
-                           roughly 0.45em from the top of the line
-                           box. Bullet is 6px (≈ 0.4em). Setting
-                           margin-top to 0.6em places the bullet
-                           CENTER on the text x-height — visually
-                           level with lowercase letters. Tested
-                           against multiple block samples; aligns
-                           consistently. */
+                           against the body line-height. Adjusting
+                           the bullet DOWN from 0.6em to 0.7em
+                           because the previous value put the bullet
+                           slightly above the text baseline — now
+                           sits visually level with the text x-height. */
                         .zpdf-render .zpdf-content ul > li::before {
                           content: "";
                           flex: 0 0 6px;
                           width: 6px;
                           height: 6px;
-                          margin-top: 0.6em;
+                          margin-top: 0.7em;
                           border-radius: 999px;
                           background: #1f4534;
                         }
-                        /* Inner wrapper: take remaining row, allow
-                           text to wrap NATURALLY. We do NOT force
-                           min-width: 0 because that combined with
-                           inline-block <strong> can cause the bold
-                           word to wrap alone on its line. Instead
-                           we let the flex item size by its content
-                           and rely on overflow-wrap on long tokens. */
-                        .zpdf-render .zpdf-content ul > li > *,
-                        .zpdf-render .zpdf-content ol > li > * {
+                        /* The inline content of each <li> is wrapped
+                           in <span class="zpdf-li-text"> by markdownToHtml.
+                           That gives us a SINGLE flex item that owns the
+                           entire line's text flow. Inside the span,
+                           inline-block <code> chips, <strong>, etc.
+                           wrap naturally as inline elements — no flex
+                           weirdness. flex: 1 1 0% + min-width: 0 lets
+                           the span shrink to share the row with the
+                           bullet, while still allowing long inline-code
+                           chips to wrap rather than push the row
+                           wider than the page. */
+                        .zpdf-render .zpdf-content .zpdf-li-text {
+                          flex: 1 1 0%;
                           min-width: 0;
+                          display: block;
+                          line-height: 1.55;
+                          word-wrap: break-word;
+                          overflow-wrap: anywhere;
                         }
-                        /* Treat the bold lead-in (e.g. "**Photoshoot**: text")
-                           as part of the line — strong stays inline and
-                           inherits the parent line-height. Without an
-                           explicit display:inline + line-height:inherit,
-                           some renderers tried to keep <strong> on its
-                           own line when the bullet's flex item was
-                           narrow. */
+                        /* Bold lead-in inside li — stays inline, with
+                           a regular word-break so multi-word bold
+                           phrases like "Listing AVDs" don't wrap
+                           mid-word. word-break:normal allows the
+                           SPACE between words to break, but lets
+                           individual words stay whole. */
                         .zpdf-render .zpdf-content li strong,
                         .zpdf-render .zpdf-content li b {
                           display: inline;
                           line-height: inherit;
                           white-space: normal;
-                          word-break: keep-all;
+                          word-break: normal;
+                        }
+                        /* Inline code chips inside li/p — give them
+                           breathing room on both sides so adjacent
+                           chips don't appear jam-packed (the bug
+                           in the AVD script screenshot where
+                           "$P / AT / H" looked smashed together).
+                           Vertical-align: baseline keeps the chip
+                           on the same baseline as the surrounding
+                           prose. */
+                        .zpdf-render .zpdf-content li code,
+                        .zpdf-render .zpdf-content p code {
+                          margin: 0 2px;
+                          vertical-align: baseline;
                         }
                         /* Ordered list — same flex layout, but use a
                            CSS counter rendered as text instead of a
@@ -9315,19 +9919,19 @@ export default function App() {
                           text-align: right;
                           margin-top: 0;
                         }
-                        /* Wide gaps before major BLOCK transitions
-                           (headings → next section) so the slicer
-                           has clear cut points. We exclude ul/ol/
-                           .zpdf-checklist because applying 24px
-                           top-margin to lists pushed bullet items
-                           further apart than necessary. */
+                        /* Major blocks use the JS-injected cut-hint
+                           spacers (24px wide before h1/h2/h3/pre/
+                           blockquote/table; 8px narrow before lists)
+                           for vertical separation. Adding a CSS
+                           top-margin here on top of that compounded
+                           into ~50px gaps between every section. We
+                           only keep page-break hints. */
                         .zpdf-render .zpdf-content h1,
                         .zpdf-render .zpdf-content h2,
                         .zpdf-render .zpdf-content h3,
                         .zpdf-render .zpdf-content blockquote,
                         .zpdf-render .zpdf-content pre,
                         .zpdf-render .zpdf-content table {
-                          margin-top: 26px !important;
                           page-break-inside: avoid;
                           break-inside: avoid;
                           page-break-after: avoid;
@@ -9339,26 +9943,33 @@ export default function App() {
                           padding: 0.15em 0.4em;
                           border-radius: 3px;
                           font-size: 0.9em;
-                          font-family: 'Courier New', monospace;
-                          /* Wrap long tokens like URLs / hashes so
-                             they don't blow past the page width. */
-                          word-break: break-all;
+                          font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'Courier New', monospace;
+                          /* Long inline code chips like file paths
+                             and URLs: prefer to keep the WHOLE chip
+                             on one line. break-word + anywhere lets
+                             the chip wrap if it absolutely has to,
+                             but unlike break-all it won't carve a
+                             single-character "r" off the end of a
+                             long token. The chip looks visually
+                             cleaner this way. */
+                          word-break: break-word;
                           overflow-wrap: anywhere;
                           white-space: normal;
-                          /* Inherit the surrounding line's height
-                             instead of growing the line, so a li
-                             with inline code chips still has its
-                             bullet aligned to the same baseline as
-                             a li with no code. */
                           line-height: inherit;
                           vertical-align: baseline;
+                          /* Discourage breaks mid-chip by making the
+                             chip an inline-block — it'll prefer to
+                             move to the next line as a unit. */
+                          display: inline;
                         }
+                        /* Plain <pre> fallback (when PDF source has
+                           a raw pre without our header wrapper). */
                         .zpdf-render .zpdf-content pre {
-                          background: #f4f7f2;
-                          color: #1f3a26;
-                          border: 1px solid #dde5da;
-                          padding: 18px 20px;
-                          border-radius: 14px;
+                          background: #f7f7f5;
+                          color: #1f2227;
+                          border: 1px solid #e5e7e0;
+                          padding: 14px 18px;
+                          border-radius: 12px;
                           overflow: hidden;
                           font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
                           font-size: 13px;
@@ -9368,6 +9979,94 @@ export default function App() {
                           word-break: break-word;
                           overflow-wrap: anywhere;
                         }
+                        /* Structured code block (emitted by our
+                           fenced-code rule above). Matches the
+                           in-app ZkCodeBlock visual: header strip
+                           with language label, then code body. */
+                        .zpdf-render .zpdf-code-block {
+                          background: #f7f7f5;
+                          border: 1px solid #e5e7e0;
+                          border-radius: 14px;
+                          margin: 1.4em 0;
+                          overflow: hidden;
+                          box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.02);
+                        }
+                        .zpdf-render .zpdf-code-block-header {
+                          padding: 10px 18px;
+                          background: #fbfbf9;
+                          border-bottom: 1px solid #ececea;
+                          font-family: 'Inter', system-ui, sans-serif;
+                        }
+                        .zpdf-render .zpdf-code-block-lang {
+                          font-size: 12px;
+                          font-weight: 600;
+                          color: #4b5158;
+                        }
+                        .zpdf-render .zpdf-code-block-body {
+                          margin: 0;
+                          padding: 14px 18px;
+                          background: transparent;
+                          border: 0;
+                          border-radius: 0;
+                          color: #1f2227;
+                          font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+                          font-size: 13px;
+                          line-height: 1.7;
+                          white-space: pre-wrap;
+                          word-break: break-word;
+                          overflow-wrap: anywhere;
+                        }
+                        /* Prism tokens INSIDE the PDF code block.
+                           Light-mode palette mirrors the on-screen
+                           CSS so PDFs match what the user just saw. */
+                        .zpdf-render .zpdf-code-block .token.comment,
+                        .zpdf-render .zpdf-code-block .token.prolog,
+                        .zpdf-render .zpdf-code-block .token.doctype,
+                        .zpdf-render .zpdf-code-block .token.cdata {
+                          color: #8b8f96;
+                          font-style: italic;
+                        }
+                        .zpdf-render .zpdf-code-block .token.punctuation { color: #555a62; }
+                        .zpdf-render .zpdf-code-block .token.property,
+                        .zpdf-render .zpdf-code-block .token.tag,
+                        .zpdf-render .zpdf-code-block .token.boolean,
+                        .zpdf-render .zpdf-code-block .token.number,
+                        .zpdf-render .zpdf-code-block .token.constant,
+                        .zpdf-render .zpdf-code-block .token.symbol,
+                        .zpdf-render .zpdf-code-block .token.deleted {
+                          color: #d44a6f;
+                        }
+                        .zpdf-render .zpdf-code-block .token.selector,
+                        .zpdf-render .zpdf-code-block .token.attr-name,
+                        .zpdf-render .zpdf-code-block .token.string,
+                        .zpdf-render .zpdf-code-block .token.char,
+                        .zpdf-render .zpdf-code-block .token.builtin,
+                        .zpdf-render .zpdf-code-block .token.inserted {
+                          color: #2d8a4a;
+                        }
+                        .zpdf-render .zpdf-code-block .token.operator,
+                        .zpdf-render .zpdf-code-block .token.entity,
+                        .zpdf-render .zpdf-code-block .token.url {
+                          color: #6f7480;
+                        }
+                        .zpdf-render .zpdf-code-block .token.atrule,
+                        .zpdf-render .zpdf-code-block .token.attr-value,
+                        .zpdf-render .zpdf-code-block .token.keyword {
+                          color: #9333ea;
+                          font-weight: 500;
+                        }
+                        .zpdf-render .zpdf-code-block .token.function,
+                        .zpdf-render .zpdf-code-block .token.class-name {
+                          color: #2d6da3;
+                        }
+                        .zpdf-render .zpdf-code-block .token.regex,
+                        .zpdf-render .zpdf-code-block .token.important,
+                        .zpdf-render .zpdf-code-block .token.variable {
+                          color: #c47d2a;
+                        }
+                        .zpdf-render .zpdf-code-block .token.important,
+                        .zpdf-render .zpdf-code-block .token.bold { font-weight: 700; }
+                        .zpdf-render .zpdf-code-block .token.italic { font-style: italic; }
                         /* Code inside <pre> shouldn't keep the
                            inline-code chip background — that creates
                            a pill inside the block. Inherit instead. */
@@ -9420,21 +10119,69 @@ export default function App() {
                     // just give the pagination algorithm something to
                     // grab onto.
                     try {
-                      const breakHint = `<div style="height:14px;background:#ffffff;margin:0;padding:0;line-height:0;font-size:0;" data-pdf-cut="1"></div>`;
+                      // Two spacer sizes:
+                      //   - "wide" (24px) before h1/h2/h3/pre/blockquote/table.
+                      //     These are blocks the user expects to live as
+                      //     ONE unit on a page. The wide gap gives the
+                      //     slicer a clear, unmistakable cut point so
+                      //     the heading doesn't get orphaned at the
+                      //     bottom of a page with its content on the
+                      //     next.
+                      //   - "narrow" (8px) before ul/ol/.zpdf-checklist/hr.
+                      //     We still want a recognizable gap so the
+                      //     slicer can land on it, but the wide gap
+                      //     between consecutive lists made the per-item
+                      //     spacing look inflated.
+                      const wideHint = `<div style="height:24px;background:#ffffff;margin:0;padding:0;line-height:0;font-size:0;" data-pdf-cut="1"></div>`;
+                      const narrowHint = `<div style="height:8px;background:#ffffff;margin:0;padding:0;line-height:0;font-size:0;" data-pdf-cut="1"></div>`;
                       const contentRoot = container.querySelector(
                         ".zpdf-content",
                       );
                       if (contentRoot) {
-                        const majorBlocks = contentRoot.querySelectorAll(
-                          "h1, h2, h3, blockquote, pre, table, ul, ol, .zpdf-checklist, hr",
-                        );
-                        majorBlocks.forEach((el) => {
-                          // Skip if previous sibling is already a cut hint
-                          // (e.g. nested lists).
-                          const prev = el.previousElementSibling as HTMLElement | null;
-                          if (prev?.getAttribute("data-pdf-cut") === "1") return;
-                          el.insertAdjacentHTML("beforebegin", breakHint);
-                        });
+                        // Inject WIDE before headings, code, quotes, tables.
+                        // Target the zpdf-code-block WRAPPER (not the
+                        // inner pre.zpdf-code-block-body) so the cut
+                        // hint goes ABOVE the whole code surface — not
+                        // BETWEEN the dark header strip and the code
+                        // body (which would leave the "Bash" header
+                        // stranded alone at the bottom of a page,
+                        // with the code body starting on the next).
+                        contentRoot
+                          .querySelectorAll(
+                            "h1, h2, h3, blockquote, .zpdf-code-block, pre:not(.zpdf-code-block-body), table",
+                          )
+                          .forEach((el) => {
+                            const prev = el.previousElementSibling as HTMLElement | null;
+                            if (prev?.getAttribute("data-pdf-cut") === "1") return;
+                            // If the previous element is a heading,
+                            // skip injecting a wide gap — we want
+                            // headings to STAY VISUALLY ATTACHED to
+                            // the block immediately below them
+                            // (their content). Otherwise we get a
+                            // big empty void between "Section title"
+                            // and the code block / paragraph that
+                            // belongs to it.
+                            if (
+                              prev &&
+                              /^H[1-6]$/.test(prev.tagName)
+                            )
+                              return;
+                            el.insertAdjacentHTML("beforebegin", wideHint);
+                          });
+                        // Inject NARROW before lists and hr.
+                        contentRoot
+                          .querySelectorAll("ul, ol, .zpdf-checklist, hr")
+                          .forEach((el) => {
+                            const prev = el.previousElementSibling as HTMLElement | null;
+                            if (prev?.getAttribute("data-pdf-cut") === "1") return;
+                            // Same heading-attachment rule for lists.
+                            if (
+                              prev &&
+                              /^H[1-6]$/.test(prev.tagName)
+                            )
+                              return;
+                            el.insertAdjacentHTML("beforebegin", narrowHint);
+                          });
                       }
                     } catch (hintErr) {
                       console.warn(
@@ -9487,6 +10234,17 @@ export default function App() {
                       h: number;
                     };
                     const linkRects: LinkRect[] = [];
+                    // Rects of blocks that should NEVER be split across
+                    // a page boundary. The slicer consults these when
+                    // choosing a cut point: if the proposed cut would
+                    // land INSIDE one of these rects, the cut is moved
+                    // to the rect's TOP (pushing the whole block to the
+                    // next page) instead of cutting it in half. This
+                    // is the visual fix for "quote cut in half across
+                    // pages" — the quote either stays on the current
+                    // page in full, or moves to the next page in full.
+                    type KeepRect = { yTop: number; yBottom: number };
+                    const keepRects: KeepRect[] = [];
                     try {
                       const containerRect = container.getBoundingClientRect();
                       const anchors = container.querySelectorAll(
@@ -9511,9 +10269,28 @@ export default function App() {
                           });
                         }
                       });
+                      // Capture all keep-together block bounds. We
+                      // INCLUDE the cut-hint spacer above the block
+                      // in the "top" so the slicer's snap moves the
+                      // cut to the whitespace ABOVE the block — not
+                      // to the block's content edge (which would
+                      // produce a tight cut with no breathing room).
+                      const keepBlocks = container.querySelectorAll(
+                        "blockquote, pre, table, .zpdf-checklist, .zpdf-code-block, h1, h2, h3",
+                      );
+                      keepBlocks.forEach((el) => {
+                        const r = (el as HTMLElement).getBoundingClientRect();
+                        const yTop = r.top - containerRect.top;
+                        const yBottom = r.bottom - containerRect.top;
+                        // Convert from CSS px to canvas px (scale 2).
+                        keepRects.push({
+                          yTop: yTop * 2,
+                          yBottom: yBottom * 2,
+                        });
+                      });
                     } catch (linkErr) {
                       console.warn(
-                        "[pdf] link rect capture failed:",
+                        "[pdf] rect capture failed:",
                         linkErr,
                       );
                     }
@@ -9730,6 +10507,42 @@ export default function App() {
                           sliceEnd = findCleanBreak(sliceEnd, 1100);
                           // Safety: don't go backwards
                           if (sliceEnd <= yOffset) {
+                            sliceEnd = Math.min(
+                              yOffset + pageContentHeightPx,
+                              canvas.height,
+                            );
+                          }
+                          // KEEP-TOGETHER snap: if the proposed cut
+                          // would fall INSIDE a blockquote/pre/table/
+                          // checklist/heading, push the cut up to the
+                          // block's top so the whole block moves to
+                          // the next page instead of being split in
+                          // half. We only do this if there's enough
+                          // content above the block to make a
+                          // worthwhile current page (>= 30% of page).
+                          // Otherwise we leave the bad cut in place —
+                          // the block is just too tall to keep whole.
+                          for (const kr of keepRects) {
+                            const krHeight = kr.yBottom - kr.yTop;
+                            // Only snap if the block fits in a page
+                            // (krHeight <= pageContentHeightPx). If the
+                            // block is genuinely taller than a page we
+                            // can't keep it whole anywhere, so accept
+                            // the cut. Lower the floor to 15% so even
+                            // a tight first-page-of-block-on-next
+                            // snap fires.
+                            if (
+                              krHeight <= pageContentHeightPx &&
+                              sliceEnd > kr.yTop &&
+                              sliceEnd < kr.yBottom &&
+                              kr.yTop > yOffset + pageContentHeightPx * 0.15
+                            ) {
+                              sliceEnd = Math.floor(kr.yTop) - 4;
+                              break;
+                            }
+                          }
+                          if (sliceEnd <= yOffset) {
+                            // Fallback if the snap pushed too far up.
                             sliceEnd = Math.min(
                               yOffset + pageContentHeightPx,
                               canvas.height,
@@ -10943,7 +11756,10 @@ export default function App() {
                 // anchor on the button, so it sits beside the rail
                 // rather than crammed inside it).
                 <button
-                  onClick={() => setSidebarCollapsed(false)}
+                  onClick={() => {
+                    setRailTipLabel(null);
+                    setSidebarCollapsed(false);
+                  }}
                   onMouseEnter={(e) => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setRailTipY(r.top + r.height / 2);
@@ -10970,18 +11786,25 @@ export default function App() {
                 // Hover shows "Close sidebar" via the portal tooltip.
                 <button
                   onClick={() => {
+                    // Clear the rail tooltip immediately. After the
+                    // sidebar collapses/expands, the button's DOM
+                    // position changes and onMouseLeave may not fire
+                    // — leaving the tooltip stranded on screen.
+                    setRailTipLabel(null);
                     if (mobileDrawerOpen) {
                       setMobileDrawerOpen(false);
                     } else {
                       setSidebarCollapsed(!sidebarCollapsed);
                     }
                   }}
-                  onMouseEnter={(e) => {
-                    if (!mobileDrawerOpen) {
-                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setRailTipY(r.top + r.height / 2);
-                      setRailTipLabel("Close sidebar");
-                    }
+                  onMouseEnter={() => {
+                    // When the sidebar is expanded, the close button
+                    // sits right next to the logo + wordmark — the
+                    // affordance is obvious and a "Close sidebar"
+                    // pill ends up overlapping the logo (visible in
+                    // user-reported screenshot). Just don't show a
+                    // tooltip here. The collapsed-state "Open
+                    // sidebar" pill remains.
                   }}
                   onMouseLeave={() => setRailTipLabel(null)}
                   className="p-1.5 zk-text-faint hover:zk-text dark:hover:text-white hover:bg-white/60 dark:hover:bg-[#28292c]/40 rounded-lg transition-all active:scale-95"
@@ -10996,8 +11819,24 @@ export default function App() {
               )}
             </div>
 
-            {/* Nav */}
-            <nav className="space-y-1 flex-1 overflow-y-auto custom-scrollbar min-h-0">
+            {/* Nav.
+                Collapsed mode gets an extra top margin so the first
+                nav item aligns visually with the search bar's
+                baseline in the main content area. Without this the
+                rail's first icon sat right under the logo, while
+                the search bar's baseline was ~48px lower — making
+                the two columns look misaligned. */}
+            <nav
+              className={cn(
+                "space-y-1 flex-1 overflow-y-auto custom-scrollbar min-h-0",
+                // Push the first nav item down so it aligns with the
+                // search bar in the main panel. Collapsed rail needs a
+                // bigger nudge (no logo+wordmark above) — lg:mt-14
+                // lines the first icon up with the search bar's
+                // vertical center. Expanded only needs a small tweak.
+                sidebarCollapsed ? "lg:mt-8" : "lg:mt-2",
+              )}
+            >
               <DroppableSidebarItem
                 id="sidebar-All"
                 isOver={dragOverSidebarKey === "All"}
@@ -11296,7 +12135,10 @@ export default function App() {
                   it in the rail would clutter the chrome. */}
               {sidebarCollapsed && (
                 <button
-                  onClick={() => setIsSettingsOpen(true)}
+                  onClick={() => {
+                    setRailTipLabel(null);
+                    setIsSettingsOpen(true);
+                  }}
                   onMouseEnter={(e) => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setRailTipY(r.top + r.height / 2);
@@ -11310,7 +12152,10 @@ export default function App() {
                 </button>
               )}
               <button
-                onClick={() => setShowProfilePopover(!showProfilePopover)}
+                onClick={() => {
+                  setRailTipLabel(null);
+                  setShowProfilePopover(!showProfilePopover);
+                }}
                 data-profile-popover
                 onMouseEnter={(e) => {
                   if (sidebarCollapsed) {
@@ -11321,7 +12166,7 @@ export default function App() {
                 }}
                 onMouseLeave={() => setRailTipLabel(null)}
                 className={cn(
-                  "relative flex items-center gap-3 rounded-xl transition-all hover:bg-[#d2e8d5]/40 dark:hover:bg-[#2d5a44]/35 active:scale-95",
+                  "relative flex items-center gap-3 rounded-xl transition-all hover:bg-[#d2e8d5]/40 dark:hover:bg-[#2d5a44]/35 hover:scale-[1.05] active:scale-[0.92] active:shadow-[0_0_0_3px_rgba(45,90,68,0.22)]",
                   sidebarCollapsed
                     ? "p-1.5 flex-col gap-2.5"
                     : "w-full px-2 py-2",
@@ -11364,7 +12209,7 @@ export default function App() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.95 }}
                     className={cn(
-                      "absolute bottom-full mb-2 bg-white dark:bg-[#2d2e31] rounded-2xl shadow-2xl border border-[#dde5da] dark:border-white/[0.10] z-[62] overflow-hidden",
+                      "absolute bottom-full mb-2 bg-white dark:bg-[#282929] rounded-2xl shadow-2xl border border-[#dde5da] dark:border-white/[0.10] z-[62] overflow-hidden",
                       sidebarCollapsed
                         ? "left-0 w-64"
                         : "left-0 right-0 w-auto min-w-[220px]",
@@ -11604,7 +12449,7 @@ export default function App() {
                         onBlur={() =>
                           setTimeout(() => setSearchFocused(false), 200)
                         }
-                        className="w-full pl-11 pr-4 py-2.5 zk-surface-muted dark:bg-[#2d2e31] rounded-xl border border-transparent dark:border-white/[0.06] outline-none text-sm zk-text dark:zk-text placeholder:zk-text-faint focus:bg-white dark:focus:bg-[#1f1f1f] focus:dark:border-white/[0.12] focus:shadow-md transition-all"
+                        className="w-full pl-11 pr-4 py-2.5 zk-surface-muted dark:bg-[#282929] rounded-xl border border-transparent dark:border-white/[0.06] outline-none text-sm zk-text dark:zk-text placeholder:zk-text-faint focus:bg-white dark:focus:bg-[#1f1f1f] focus:dark:border-white/[0.12] focus:shadow-md transition-all"
                         style={{ fontFamily: "var(--font-sans)" }}
                       />
                       {/* Category quick-filter panel */}
@@ -11764,7 +12609,7 @@ export default function App() {
                       onClick={() => {
                         setShowCaptureModal(true);
                       }}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2d5a44] bg-[#e8f3ee] hover:bg-[#dcfce8] dark:bg-[#2d5a44]/40 dark:hover:bg-[#2d5a44]/30 dark:text-[#a8d0b0] transition-all active:scale-95"
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2d5a44] bg-[#e8f3ee] hover:bg-[#dcfce8] dark:bg-[#2d5a44]/40 dark:hover:bg-[#2d5a44]/30 dark:text-[#a8d0b0] transition-all hover:scale-[1.04] active:scale-95 active:shadow-[0_0_0_3px_rgba(45,90,68,0.18)]"
                       title="New note"
                       aria-label="Create a new note"
                       style={{ fontFamily: "var(--font-sans)" }}
@@ -11787,7 +12632,7 @@ export default function App() {
                         setAskMeta(null);
                         setAskQuestion("");
                       }}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2d5a44] bg-[#e8f3ee] hover:bg-[#dcfce8] dark:bg-[#2d5a44]/40 dark:hover:bg-[#2d5a44]/30 dark:text-[#a8d0b0] transition-all"
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2d5a44] bg-[#e8f3ee] hover:bg-[#dcfce8] dark:bg-[#2d5a44]/40 dark:hover:bg-[#2d5a44]/30 dark:text-[#a8d0b0] transition-all hover:scale-[1.04] active:scale-95 active:shadow-[0_0_0_3px_rgba(45,90,68,0.18)]"
                       title="Ask your notes a question (⌘K)"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
@@ -11864,7 +12709,7 @@ export default function App() {
                       <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value as any)}
-                        className="zk-surface-muted dark:bg-[#2d2e31] zk-text-secondary dark:zk-text-muted text-xs font-medium px-3 py-2 rounded-lg outline-none border border-transparent dark:border-white/[0.06] cursor-pointer hover:zk-surface-sunken dark:hover:bg-[#35363a] dark:hover:border-white/[0.1] transition-all hidden sm:block"
+                        className="zk-surface-muted dark:bg-[#282929] zk-text-secondary dark:zk-text-muted text-xs font-medium px-3 py-2 rounded-lg outline-none border border-transparent dark:border-white/[0.06] cursor-pointer hover:zk-surface-sunken dark:hover:bg-[#35363a] dark:hover:border-white/[0.1] transition-all hidden sm:block"
                         style={{ fontFamily: "var(--font-sans)" }}
                       >
                         <option value="newest">Newest</option>
@@ -11884,7 +12729,7 @@ export default function App() {
                       "flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all sm:min-w-[110px]",
                       profile?.autoSortEnabled
                         ? "text-white"
-                        : "zk-surface-muted dark:bg-[#2d2e31] zk-text-secondary dark:zk-text-muted border border-transparent dark:border-white/[0.06]",
+                        : "zk-surface-muted dark:bg-[#282929] zk-text-secondary dark:zk-text-muted border border-transparent dark:border-white/[0.06]",
                     )}
                     style={
                       profile?.autoSortEnabled
@@ -11965,7 +12810,7 @@ export default function App() {
                     placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-2.5 zk-surface-muted dark:bg-[#2d2e31] rounded-xl border border-transparent dark:border-white/[0.06] outline-none text-sm zk-text dark:zk-text placeholder:zk-text-faint focus:bg-white dark:focus:bg-[#1f1f1f] focus:dark:border-white/[0.12] transition-all"
+                    className="w-full pl-11 pr-4 py-2.5 zk-surface-muted dark:bg-[#282929] rounded-xl border border-transparent dark:border-white/[0.06] outline-none text-sm zk-text dark:zk-text placeholder:zk-text-faint focus:bg-white dark:focus:bg-[#1f1f1f] focus:dark:border-white/[0.12] transition-all"
                     style={{ fontFamily: "var(--font-sans)" }}
                   />
                 </div>
@@ -12479,7 +13324,7 @@ export default function App() {
                       ? "No notes match your search"
                       : activeCategory === "Trash"
                         ? "Trash is empty"
-                        : activeCategory
+                        : activeCategory && activeCategory !== "All"
                           ? `No ${activeCategory.toLowerCase()} notes`
                           : "Your zakar is empty"}
                   </h3>
@@ -12491,7 +13336,7 @@ export default function App() {
                       ? "Try a different keyword or clear your search."
                       : activeCategory === "Trash"
                         ? "Deleted notes will appear here for 7 days."
-                        : activeCategory
+                        : activeCategory && activeCategory !== "All"
                           ? "Notes in this category will appear here."
                           : "Capture your first thought above."}
                   </p>
@@ -12689,8 +13534,8 @@ export default function App() {
                                       </div>
                                     )}
                                     <div className="flex flex-col pl-4 pr-5 py-4">
-                                      <div className="flex items-center justify-between mb-4 gap-2">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div className="flex items-center justify-between mb-4 gap-3 lg:gap-5">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                           <span
                                             data-cat-badge
                                             className={cn(
@@ -13124,10 +13969,11 @@ export default function App() {
                                           {note.tags.length > 0 ? (
                                             <>
                                               {note.tags
+                                                .filter((t) => typeof t === "string" && t.trim().length > 0)
                                                 .slice(0, 2)
-                                                .map((tag) => (
+                                                .map((tag, ti) => (
                                                   <span
-                                                    key={tag}
+                                                    key={`tag-${ti}-${tag}`}
                                                     className="px-2 py-0.5 bg-[#eaf0e8] dark:bg-[#28292c] text-[#747d78] dark:text-[#a3a3a3] text-[10px] font-medium rounded-full truncate max-w-[80px] border border-[#dde5da]/60 dark:border-white/5"
                                                     style={{
                                                       fontFamily:
@@ -13463,8 +14309,8 @@ export default function App() {
 
                                   {viewMode === "grid" && (
                                     <div className="flex flex-col pl-4 pr-5 py-4">
-                                      <div className="flex items-center justify-between mb-4 gap-2">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div className="flex items-center justify-between mb-4 gap-3 lg:gap-5">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                           <span
                                             data-cat-badge
                                             className={cn(
@@ -13870,10 +14716,11 @@ export default function App() {
                                           {note.tags.length > 0 ? (
                                             <>
                                               {note.tags
+                                                .filter((t) => typeof t === "string" && t.trim().length > 0)
                                                 .slice(0, 2)
-                                                .map((tag) => (
+                                                .map((tag, ti) => (
                                                   <span
-                                                    key={tag}
+                                                    key={`tag-${ti}-${tag}`}
                                                     className="px-2 py-0.5 bg-[#eaf0e8] dark:bg-[#28292c] text-[#747d78] dark:text-[#a3a3a3] text-[10px] font-medium rounded-full truncate max-w-[80px] border border-[#dde5da]/60 dark:border-white/5"
                                                     style={{
                                                       fontFamily:
@@ -14194,7 +15041,7 @@ export default function App() {
 
                                       {/* Body — full content preview, up to 10 lines */}
                                       <p
-                                        className="text-[13px] zk-text-secondary dark:zk-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-[6]"
+                                        className="text-[13px] zk-text-secondary dark:text-[#d4d8d3] leading-relaxed whitespace-pre-wrap line-clamp-[6]"
                                         style={{
                                           fontFamily: "var(--font-sans)",
                                         }}
@@ -14684,7 +15531,7 @@ export default function App() {
               <div className="space-y-3">
                 <button
                   onClick={toggleTheme}
-                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
+                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl overflow-hidden relative">
@@ -14731,7 +15578,7 @@ export default function App() {
 
                 <button
                   onClick={toggleAutoSort}
-                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
+                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl">
@@ -14758,7 +15605,7 @@ export default function App() {
 
                 <button
                   onClick={toggleSensitiveDataDetection}
-                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
+                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl">
@@ -14788,7 +15635,7 @@ export default function App() {
                   </div>
                 </button>
 
-                <div className="p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl">
+                <div className="p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl">
                       <Globe className="w-5 h-5 zk-text-primary-brand" />
@@ -14825,7 +15672,7 @@ export default function App() {
                   <button
                     onClick={() => setExportPickerOpen((v) => !v)}
                     disabled={isExporting}
-                    className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl">
@@ -14912,7 +15759,7 @@ export default function App() {
                     importStatus.state === "importing" ||
                     importStatus.state === "sorting"
                   }
-                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-between p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl">
@@ -15042,7 +15889,7 @@ export default function App() {
                       importStatus.state === "sorting" ||
                       importStatus.state === "parsing"
                     }
-                    className="w-full flex items-center justify-between gap-3 p-4 bg-[#f4f7f2] dark:bg-[#2d2e31] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-between gap-3 p-4 bg-[#f4f7f2] dark:bg-[#282929] border border-[#dde5da] dark:border-white/[0.08] rounded-2xl hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <div className="p-1.5 bg-[#d2e8d5]/30 dark:bg-[#2d5a44]/10 rounded-xl flex-shrink-0">
@@ -15369,8 +16216,8 @@ export default function App() {
                   ) : !askLoading ? (
                     <div className="text-center py-6">
                       <p className="text-xs zk-text-muted">
-                        Try things like "What did I decide about the Lagos
-                        trip?" or "Notes about the Q4 launch."
+                        Try things like "What did I decide about the trip
+                        last weekend?" or "Notes about the Q4 launch."
                       </p>
                     </div>
                   ) : null}
@@ -15476,7 +16323,7 @@ export default function App() {
                         data.wasZakarExport,
                       );
                     }}
-                    className="w-full text-left px-4 py-3 rounded-xl bg-[#f4f7f2] dark:bg-[#2d2e31] hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] border zk-border-color transition-all"
+                    className="w-full text-left px-4 py-3 rounded-xl bg-[#f4f7f2] dark:bg-[#282929] hover:bg-[#eaf0e8] dark:hover:bg-[#28292c] border zk-border-color transition-all"
                   >
                     <p className="text-sm font-bold zk-text">
                       Import everything anyway
@@ -16256,11 +17103,12 @@ export default function App() {
                             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#eaf0e8] dark:bg-[#2d5a44]/30 text-[#1f4534] dark:text-[#a8d0b0] text-[9px] font-bold uppercase tracking-[0.15em]"
                             style={{ fontFamily: "var(--font-sans)" }}
                           >
-                            <span aria-hidden="true">✏️</span>
+                            <Edit2 className="w-3 h-3" strokeWidth={2.25} />
                             Editing
                           </span>
                         )}
-                        {selectedNote.status === "processing" && (
+                        {(selectedNote.status === "processing" ||
+                          processingNotes.has(selectedNote.id)) && (
                           <span
                             className="text-[9px] font-bold text-[#6b8f72] uppercase tracking-[0.15em] flex items-center gap-1.5"
                             style={{ fontFamily: "var(--font-sans)" }}
@@ -16270,7 +17118,8 @@ export default function App() {
                           </span>
                         )}
                         {selectedNote.isAutoSorted &&
-                          selectedNote.status !== "processing" && (
+                          selectedNote.status !== "processing" &&
+                          !processingNotes.has(selectedNote.id) && (
                             <span
                               className="text-[9px] font-bold text-[#6b8f72] uppercase tracking-[0.15em] flex items-center gap-1"
                               style={{ fontFamily: "var(--font-sans)" }}
@@ -16359,15 +17208,11 @@ export default function App() {
                           </button>
                         )}
                         {!isEditing && !selectedNote.isTrashed && (
-                          <div className="relative">
+                          <div className="relative" ref={colorPickerRef}>
                             <button
                               onClick={() => setIsColorPickerOpen((v) => !v)}
                               className={cn(
-                                "p-1.5 rounded-lg transition-all active:scale-[0.85] active:shadow-[0_0_0_3px_rgba(45,90,68,0.25)]",
-                                selectedNote.backgroundColor &&
-                                  selectedNote.backgroundColor !== "default"
-                                  ? "zk-text-primary-brand bg-[#d2e8d5]/40 dark:bg-[#2d5a44]/40 hover:scale-110"
-                                  : "zk-toolbar-icon",
+                                "p-1.5 rounded-lg transition-all active:scale-[0.85] active:shadow-[0_0_0_3px_rgba(45,90,68,0.25)] zk-toolbar-icon",
                               )}
                               title="Change color"
                               aria-label="Change note color"
@@ -16385,7 +17230,7 @@ export default function App() {
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: -4, scale: 0.96 }}
                                   transition={{ duration: 0.15 }}
-                                  className="absolute right-0 top-full mt-2 z-[70] bg-white dark:bg-[#2d2e31] rounded-2xl border border-[#dde5da] dark:border-white/[0.10] shadow-2xl p-3 w-[260px]"
+                                  className="absolute right-0 top-full mt-2 z-[70] bg-white dark:bg-[#282929] rounded-2xl border border-[#dde5da] dark:border-white/[0.10] shadow-2xl p-3 w-[260px]"
                                 >
                                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] zk-text-faint dark:zk-text-muted mb-2 px-1">
                                     Note color
@@ -16478,7 +17323,7 @@ export default function App() {
                         )}
 
                         {!isEditing && !selectedNote.isTrashed && (
-                          <div className="relative">
+                          <div className="relative" ref={shareDropdownRef}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -17117,12 +17962,39 @@ export default function App() {
                               Falls back to real content if the
                               masked field is empty for any reason. */}
                           {(() => {
+                            // Re-detect sensitive data client-side
+                            // every render, instead of trusting the
+                            // stored `hasSensitiveData` flag. Old
+                            // notes captured before sensitive-data
+                            // detection existed still have the flag
+                            // missing/false, so without this re-check
+                            // their Reveal/Hide button never appears.
+                            // Re-detection is cheap (regex over the
+                            // note body) and keeps fixes / detection
+                            // improvements applying retroactively to
+                            // every note, not just newly created ones.
+                            const looksSensitive =
+                              selectedNote.hasSensitiveData ||
+                              detectSensitiveData(selectedNote.content || "");
+
+                            // Pick the masked source: AI-generated
+                            // maskedContent if available, otherwise
+                            // fall back to client-side masking. This
+                            // makes the Reveal/Hide button actually
+                            // work for sensitive notes the AI never
+                            // got to (e.g. captured offline, or
+                            // sort-failed, or pre-feature).
+                            const fallbackMasked = looksSensitive
+                              ? maskSensitiveData(selectedNote.content)
+                              : null;
+                            const effectiveMasked =
+                              selectedNote.maskedContent || fallbackMasked;
                             const showMasked =
-                              selectedNote.hasSensitiveData &&
+                              looksSensitive &&
                               !revealSensitive &&
-                              !!selectedNote.maskedContent;
+                              !!effectiveMasked;
                             const displayContent = showMasked
-                              ? selectedNote.maskedContent
+                              ? effectiveMasked
                               : selectedNote.content;
                             return (
                           <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -17144,7 +18016,7 @@ export default function App() {
                                 </button>
                               </div>
                             )}
-                            {!showMasked && selectedNote.hasSensitiveData && (
+                            {!showMasked && looksSensitive && (
                               <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-[#eef3ed] dark:bg-[#1f2520] border zk-border-color">
                                 <Eye className="w-4 h-4 zk-text-secondary flex-shrink-0" />
                                 <p
@@ -17163,7 +18035,7 @@ export default function App() {
                               </div>
                             )}
                             <div
-                              className="text-[#1A1C19] dark:zk-text-muted markdown-body"
+                              className="text-[#1A1C19] dark:text-[#e8eaed] markdown-body"
                               style={{
                                 // Mockup: 15px @ line-height 1.7. Editorial
                                 // reading rhythm — generous but never
@@ -17235,7 +18107,10 @@ export default function App() {
                                         const content =
                                           nonTodoBuffer.join("\n");
                                         elements.push(
-                                          <Markdown key={`md-${lineIndex}`}>
+                                          <Markdown
+                                            key={`md-${lineIndex++}`}
+                                            components={markdownComponents}
+                                          >
                                             {repairMarkdown(content)}
                                           </Markdown>,
                                         );
@@ -17354,9 +18229,14 @@ export default function App() {
                               reads as metadata not content. */}
                           {!selectedNote.isTrashed && (
                             <div className="flex flex-wrap gap-1.5 items-center mt-10 pt-5 border-t border-[#dde5da]/60 dark:border-white/[0.06]">
-                              {(selectedNote.tags || []).map((tag) => (
+                              {(selectedNote.tags || [])
+                                .filter(
+                                  (t) =>
+                                    typeof t === "string" && t.trim().length > 0,
+                                )
+                                .map((tag, ti) => (
                                 <span
-                                  key={tag}
+                                  key={`detail-tag-${ti}-${tag}`}
                                   className="group inline-flex items-center gap-1 pl-3 pr-1.5 py-1 bg-[#eaf0e8] dark:bg-[#2d5a44]/15 text-[#1f4534] dark:text-[#a8c9ac] text-[11px] font-semibold rounded-full transition-colors hover:bg-[#d2e8d5] dark:hover:bg-[#2d5a44]/30"
                                   style={{
                                     fontFamily: "var(--font-sans)",
@@ -17533,7 +18413,7 @@ export default function App() {
 
                     {/* Modal Footer */}
                     {isEditing && (
-                      <div className="p-6 border-t zk-border-color dark:zk-border-color bg-[#eaf0e8]/60 dark:bg-[#28292c]/60 flex items-center justify-between rounded-b-xl">
+                      <div className="px-6 py-4 mt-3 border-t zk-border-color dark:zk-border-color bg-[#eaf0e8]/60 dark:bg-[#28292c]/60 flex items-center justify-between rounded-b-xl">
                         <div className="flex items-center gap-4">
                           {/* Save-state indicator removed from footer
                               per user request. The header indicator
@@ -17598,7 +18478,7 @@ export default function App() {
                         <div className="flex gap-3">
                           <button
                             onClick={() => setIsEditing(false)}
-                            className="px-8 py-3 bg-[#2e3431] dark:bg-[#3c4043] text-white dark:text-[#e8eaed] font-bold rounded-2xl hover:bg-[#1f2522] dark:hover:bg-[#5f6368] shadow-lg transition-all active:scale-95 border border-transparent dark:border-white/[0.08]"
+                            className="px-5 py-2 bg-[#2d5a44] hover:bg-[#1f4534] dark:bg-[#3a6b4f] dark:hover:bg-[#2d5a44] text-white text-[12px] font-bold rounded-xl shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
                           >
                             Close Editor
                           </button>
@@ -17759,7 +18639,13 @@ export default function App() {
           Close sidebar, Settings, and Profile buttons in the
           collapsed rail. Each button sets railTipLabel + railTipY
           onMouseEnter and clears them onMouseLeave. */}
-      {railTipLabel && (
+      {/* Render only when the sidebar is in its collapsed RAIL
+          state AND the mobile drawer isn't open. The rail tooltips
+          are exclusively for the collapsed icons; when the drawer
+          opens or the sidebar is fully expanded, the labels are
+          right next to the icons in the regular nav and a floating
+          pill would be redundant + visually noisy. */}
+      {railTipLabel && sidebarCollapsed && !mobileDrawerOpen && (
         <span
           className="pointer-events-none fixed z-[99999] px-3 py-1.5 bg-white dark:bg-[#2e3631] text-[#1a1c19] dark:text-white text-xs font-semibold rounded-full shadow-xl border border-[#dde5da] dark:border-white/[0.1] whitespace-nowrap -translate-y-1/2"
           style={{
