@@ -1,49 +1,12 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Document ID: {uid}
-    // Fields:
-    //   - uid: string (required) - Unique identifier for the user
-    //   - email: string (required, email format) - User's email address
-    //   - displayName: string (optional) - User's display name
-    //   - photoURL: string (optional) - User's profile picture URL
-    //   - autoSortEnabled: bool (required) - Whether AI magic sorting is enabled
-    //   - createdAt: timestamp (required) - When the profile was created
-    //
-    // Collection: notes
-    // Document ID: {noteId}
-    // Fields:
-    //   - id: string (optional) - Unique identifier for the note
-    //   - userId: string (required) - UID of the owner
-    //   - title: string (required, max 500 chars) - Title of the note
-    //   - content: string (required, max 50000 chars) - Formatted content
-    //   - maskedContent: string (required, max 50000 chars) - Masked version
-    //   - rawContent: string (required, max 50000 chars) - Original raw content
-    //   - category: string (optional, max 100 chars) - Category of the note
-    //   - tags: list (optional, max 50 items) - Tags for the note
-    //   - isAutoSorted: bool (optional) - Whether auto-sorted by AI
-    //   - isStarred: bool (optional) - Whether the note is starred
-    //   - isPublic: bool (optional) - Whether the note is public
-    //   - hasSensitiveData: bool (required) - Whether the note contains sensitive information
-    //   - status: string (required) - Current processing status (ready, processing)
-    //   - password: string (optional) - Password for protection
-    //   - failedAttempts: int (optional) - Number of failed password attempts
-    //   - lockedUntil: timestamp (optional) - Timestamp until which the note is locked
-    //   - createdAt: timestamp (required) - When the note was created
-    //   - updatedAt: timestamp (required) - When the note was last updated
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
-    
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -56,8 +19,27 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == resource.data.userId;
     }
 
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          ) ||
+          (
+            request.auth.token.email == "obatarhe.otughwor@gmail.com" &&
+            request.auth.token.email_verified == true
+          ) ||
+          (
+            request.auth.token.email == "obatarhe@pressable.com" &&
+            request.auth.token.email_verified == true
+          )
+        );
+    }
+
+    function isRecent(time) {
+      return time > request.time - duration.value(24, 'h') &&
+             time < request.time + duration.value(24, 'h');
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -68,117 +50,367 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(fields);
     }
 
-    function isValidUrl(url) {
-      return url is string && (url == "" || url.matches("^https://.*") || url.matches("^http://.*"));
-    }
-
-    function isAdmin() {
-      return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          (request.auth.token.email == "obatarhe.otughwor@gmail.com" && request.auth.token.email_verified == true) ||
-          (request.auth.token.email == "obatarhe@pressable.com" && request.auth.token.email_verified == true));
-    }
-
-    function isRecent(time) {
-      return time > request.time - duration.value(24, 'h') &&
-             time < request.time + duration.value(24, 'h');
-    }
-
     // ===============================================================
-    // Domain Validators
+    // User Validation
     // ===============================================================
 
     function isValidUser(data) {
-      return hasRequiredFields(['uid', 'email', 'autoSortEnabled', 'createdAt']) &&
-             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'autoSortEnabled', 'sensitiveDataDetectionEnabled', 'defaultLanguage', 'createdAt', 'role']) &&
-             data.uid == request.auth.uid &&
-             data.email is string && data.email.size() <= 200 &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
-             data.autoSortEnabled is bool &&
-             (!('sensitiveDataDetectionEnabled' in data) || data.sensitiveDataDetectionEnabled is bool) &&
-             (data.createdAt is timestamp || data.createdAt == request.time) &&
-             (!('role' in data) || (data.role is string && data.role in ['admin', 'user']));
-    }
+      return
+        hasRequiredFields([
+          'uid',
+          'email',
+          'autoSortEnabled',
+          'createdAt'
+        ]) &&
 
-    function isValidNote(data) {
-      return hasRequiredFields(['userId', 'title', 'content', 'maskedContent', 'rawContent', 'hasSensitiveData', 'status', 'createdAt', 'updatedAt']) &&
-             hasOnlyAllowedFields(['id', 'userId', 'title', 'content', 'maskedContent', 'rawContent', 'category', 'tags', 'isAutoSorted', 'isStarred', 'isPublic', 'isPinned', 'isArchived', 'hasSensitiveData', 'status', 'password', 'failedAttempts', 'lockedUntil', 'error', 'formatType', 'isTrashed', 'trashedAt', 'needsEnhancement', 'suggestedEnhancement', 'linkPreview', 'sortOrder', 'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder', 'createdAt', 'updatedAt']) &&
-             data.userId == request.auth.uid &&
-             data.title is string && data.title.size() <= 1000 &&
-             data.content is string && data.content.size() <= 100000 &&
-             data.maskedContent is string && data.maskedContent.size() <= 100000 &&
-             data.rawContent is string && data.rawContent.size() <= 100000 &&
-             data.hasSensitiveData is bool &&
-             data.status in ['ready', 'processing', 'error'] &&
-             (!('category' in data) || (data.category is string && data.category.size() <= 200)) &&
-             (!('tags' in data) || (data.tags is list && data.tags.size() <= 100)) &&
-             (!('isAutoSorted' in data) || data.isAutoSorted is bool) &&
-             (!('isStarred' in data) || data.isStarred is bool) &&
-             (!('isPublic' in data) || data.isPublic is bool) &&
-             (!('isPinned' in data) || data.isPinned is bool) &&
-             (!('isArchived' in data) || data.isArchived is bool) &&
-             (!('isTrashed' in data) || data.isTrashed is bool) &&
-             (!('trashedAt' in data) || (data.trashedAt is timestamp || data.trashedAt == null)) &&
-             (!('needsEnhancement' in data) || data.needsEnhancement is bool) &&
-             (!('suggestedEnhancement' in data) || (data.suggestedEnhancement is string || data.suggestedEnhancement == null)) &&
-             (!('linkPreview' in data) || (data.linkPreview is map || data.linkPreview == null)) &&
-             (!('sortOrder' in data) || data.sortOrder is number) &&
-             (!('password' in data) || (data.password is string && data.password.size() <= 200) || data.password == null) &&
-             (!('failedAttempts' in data) || data.failedAttempts is int) &&
-             (!('lockedUntil' in data) || (data.lockedUntil is timestamp || data.lockedUntil == null)) &&
-             (!('error' in data) || (data.error is string && data.error.size() <= 2000) || data.error == null) &&
-             (!('formatType' in data) || (data.formatType is string && data.formatType in ['auto', 'todo', 'email', 'blog', 'tweet', 'meeting', 'flashcards', 'lyrics'])) &&
-             // Embedding is an array of floats, capped to keep doc size sane.
-             // 768 dims for text-embedding-004 — leave headroom for future
-             // models with up to 3072 dims (gemini-embedding-001 max).
-             (!('embedding' in data) || (data.embedding is list && data.embedding.size() <= 3100)) &&
-             (!('embeddingHash' in data) || (data.embeddingHash is string && data.embeddingHash.size() <= 64)) &&
-             (data.createdAt is timestamp || data.createdAt == request.time) &&
-             (data.updatedAt is timestamp || data.updatedAt == request.time);
+        hasOnlyAllowedFields([
+          'uid',
+          'email',
+          'displayName',
+          'photoURL',
+          'autoSortEnabled',
+          'sensitiveDataDetectionEnabled',
+          'defaultLanguage',
+          'createdAt',
+          'role'
+        ]) &&
+
+        data.uid == request.auth.uid &&
+        data.email is string &&
+        data.email.size() <= 200 &&
+
+        (!('displayName' in data) ||
+          (data.displayName is string &&
+           data.displayName.size() <= 200)) &&
+
+        (!('photoURL' in data) ||
+          (data.photoURL is string &&
+           data.photoURL.size() <= 1000)) &&
+
+        data.autoSortEnabled is bool &&
+
+        (!('sensitiveDataDetectionEnabled' in data) ||
+          data.sensitiveDataDetectionEnabled is bool) &&
+
+        data.createdAt is timestamp &&
+
+        (!('role' in data) ||
+          (data.role is string &&
+           data.role in ['admin', 'user']));
     }
 
     // ===============================================================
-    // Rules
+    // Note Validation
+    // ===============================================================
+
+    function isValidNote(data) {
+      return
+
+        hasRequiredFields([
+          'userId',
+          'title',
+          'content',
+          'maskedContent',
+          'rawContent',
+          'hasSensitiveData',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+
+        hasOnlyAllowedFields([
+          'id',
+          'userId',
+          'title',
+          'content',
+          'maskedContent',
+          'rawContent',
+          'category',
+          'tags',
+          'isAutoSorted',
+          'isStarred',
+          'isPublic',
+          'isPinned',
+          'isArchived',
+          'hasSensitiveData',
+          'status',
+          'password',
+          'lockMethod',
+          'lockedAt',
+          'failedAttempts',
+          'lockedUntil',
+          'error',
+          'formatType',
+          'isTrashed',
+          'trashedAt',
+          'needsEnhancement',
+          'suggestedEnhancement',
+          'linkPreview',
+          'sortOrder',
+          'backgroundColor',
+          'source',
+          'embedding',
+          'embeddingHash',
+          'reminder',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+
+        data.userId == request.auth.uid &&
+
+        data.title is string &&
+        data.title.size() <= 1000 &&
+
+        data.content is string &&
+        data.content.size() <= 100000 &&
+
+        data.maskedContent is string &&
+        data.maskedContent.size() <= 100000 &&
+
+        data.rawContent is string &&
+        data.rawContent.size() <= 100000 &&
+
+        data.hasSensitiveData is bool &&
+
+        data.status in ['ready', 'processing', 'error'] &&
+
+        (!('category' in data) ||
+          (data.category is string &&
+           data.category.size() <= 200)) &&
+
+        (!('tags' in data) ||
+          (data.tags is list &&
+           data.tags.size() <= 100)) &&
+
+        (!('isAutoSorted' in data) ||
+          data.isAutoSorted is bool) &&
+
+        (!('isStarred' in data) ||
+          data.isStarred is bool) &&
+
+        (!('isPublic' in data) ||
+          data.isPublic is bool) &&
+
+        (!('isPinned' in data) ||
+          data.isPinned is bool) &&
+
+        (!('isArchived' in data) ||
+          data.isArchived is bool) &&
+
+        (!('isTrashed' in data) ||
+          data.isTrashed is bool) &&
+
+        (!('trashedAt' in data) ||
+          data.trashedAt == null ||
+          data.trashedAt is timestamp) &&
+
+        (!('needsEnhancement' in data) ||
+          data.needsEnhancement is bool) &&
+
+        (!('suggestedEnhancement' in data) ||
+          data.suggestedEnhancement == null ||
+          data.suggestedEnhancement is string) &&
+
+        (!('linkPreview' in data) ||
+          data.linkPreview == null ||
+          data.linkPreview is map) &&
+
+        (!('sortOrder' in data) ||
+          data.sortOrder is number) &&
+
+        (!('password' in data) ||
+          data.password == null ||
+          (data.password is string &&
+           data.password.size() <= 200)) &&
+
+        (!('lockMethod' in data) ||
+          data.lockMethod == null ||
+          (data.lockMethod is string &&
+           data.lockMethod in ['biometric', 'account-password'])) &&
+
+        (!('lockedAt' in data) ||
+          data.lockedAt == null ||
+          data.lockedAt is timestamp) &&
+
+        (!('failedAttempts' in data) ||
+          data.failedAttempts is int) &&
+
+        (!('lockedUntil' in data) ||
+          data.lockedUntil == null ||
+          data.lockedUntil is timestamp) &&
+
+        (!('error' in data) ||
+          data.error == null ||
+          (data.error is string &&
+           data.error.size() <= 2000)) &&
+
+        (!('formatType' in data) ||
+          (data.formatType is string &&
+           data.formatType in [
+             'auto',
+             'todo',
+             'email',
+             'blog',
+             'tweet',
+             'meeting',
+             'flashcards',
+             'lyrics'
+           ])) &&
+
+        (!('embedding' in data) ||
+          (
+            data.embedding is list &&
+            data.embedding.size() <= 3100
+          )) &&
+
+        (!('embeddingHash' in data) ||
+          (
+            data.embeddingHash is string &&
+            data.embeddingHash.size() <= 64
+          )) &&
+
+        // MOBILE SAFE TIMESTAMPS
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Partial Update Validation
+    // ===============================================================
+
+    function isValidNoteUpdate() {
+
+      let changed =
+        request.resource.data
+          .diff(resource.data)
+          .affectedKeys();
+
+      let allowedChanges = [
+        'title',
+        'content',
+        'maskedContent',
+        'rawContent',
+        'category',
+        'tags',
+        'isAutoSorted',
+        'isStarred',
+        'isPublic',
+        'isPinned',
+        'isArchived',
+        'isTrashed',
+        'trashedAt',
+        'hasSensitiveData',
+        'status',
+        'password',
+        'lockMethod',
+        'lockedAt',
+        'failedAttempts',
+        'lockedUntil',
+        'error',
+        'formatType',
+        'needsEnhancement',
+        'suggestedEnhancement',
+        'linkPreview',
+        'sortOrder',
+        'backgroundColor',
+        'source',
+        'embedding',
+        'embeddingHash',
+        'reminder',
+        'updatedAt'
+      ].toSet();
+
+      return
+        changed.hasOnly(allowedChanges) &&
+        request.resource.data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // USERS
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid) && isValidUser(request.resource.data) && 
-                      (request.resource.data.createdAt == request.time || isRecent(request.resource.data.createdAt)) &&
-                      (!('role' in request.resource.data) || request.resource.data.role == 'user');
-      allow update: if isOwner(uid) && isValidUser(request.resource.data) && 
-                      (request.resource.data.createdAt == resource.data.createdAt || request.resource.data.createdAt == request.time || isRecent(request.resource.data.createdAt)) &&
-                      (!('role' in resource.data) || request.resource.data.role == resource.data.role || isAdmin());
-      allow delete: if isOwner(uid) || isAdmin();
+
+      allow read:
+        if isOwner(uid) || isAdmin();
+
+      allow create:
+        if isOwner(uid) &&
+           isValidUser(request.resource.data) &&
+           isRecent(request.resource.data.createdAt) &&
+           (
+             !('role' in request.resource.data) ||
+             request.resource.data.role == 'user'
+           );
+
+      allow update:
+        if isOwner(uid) &&
+           isValidUser(request.resource.data) &&
+           request.resource.data.createdAt ==
+           resource.data.createdAt &&
+           (
+             !('role' in resource.data) ||
+             request.resource.data.role ==
+             resource.data.role ||
+             isAdmin()
+           );
+
+      allow delete:
+        if isOwner(uid) || isAdmin();
     }
 
-    // Validates partial updates that only change metadata fields (trash, star, share, password, status, lock)
-    // This avoids requiring full document validation when only toggling flags
-    function isValidNoteUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      // These are the only fields allowed to change in a partial update
-      let allowedChanges = ['isTrashed', 'trashedAt', 'isStarred', 'isPublic', 'isPinned', 'isArchived', 'password', 
-                            'failedAttempts', 'lockedUntil', 'status', 'updatedAt', 
-                            'title', 'content', 'maskedContent', 'rawContent', 'category', 
-                            'tags', 'isAutoSorted', 'hasSensitiveData', 'error', 'formatType',
-                            'needsEnhancement', 'suggestedEnhancement', 'linkPreview', 'sortOrder',
-                            'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder'].toSet();
-      return changed.hasOnly(allowedChanges);
-    }
+    // ===============================================================
+    // NOTES
+    // ===============================================================
 
     match /notes/{noteId} {
-      allow read: if (resource.data.isPublic == true) || (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()));
-      allow create: if isAuthenticated() && isValidNote(request.resource.data) && 
-                      request.resource.data.createdAt == request.time;
-      allow update: if isAuthenticated() && isDocOwner() &&
-                      request.resource.data.userId == resource.data.userId &&
-                      request.resource.data.createdAt == resource.data.createdAt &&
-                      (request.resource.data.updatedAt == request.time || isRecent(request.resource.data.updatedAt) || request.resource.data.updatedAt == resource.data.updatedAt) &&
-                      (isValidNote(request.resource.data) || isValidNoteUpdate());
-      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin()) && 
-                       (!('password' in resource.data) || resource.data.password == null || resource.data.password == "");
+
+      allow read:
+        if resource.data.isPublic == true ||
+           (
+             isAuthenticated() &&
+             (
+               resource.data.userId == request.auth.uid ||
+               isAdmin()
+             )
+           );
+
+      allow create:
+        if isAuthenticated() &&
+           isValidNote(request.resource.data);
+
+      allow update:
+        if isAuthenticated() &&
+           isDocOwner() &&
+
+           // prevent ownership transfer
+           request.resource.data.userId ==
+           resource.data.userId &&
+
+           // prevent createdAt edits
+           request.resource.data.createdAt ==
+           resource.data.createdAt &&
+
+           // MOBILE SAFE UPDATE CHECK
+           request.resource.data.updatedAt is timestamp &&
+
+           // full validation
+           isValidNote(request.resource.data) &&
+
+           // partial update validation
+           isValidNoteUpdate();
+
+      allow delete:
+        if isAuthenticated() &&
+           (
+             isDocOwner() ||
+             isAdmin()
+           ) &&
+           (
+             !('password' in resource.data) ||
+             resource.data.password == null ||
+             resource.data.password == ""
+           );
     }
   }
 }
