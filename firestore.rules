@@ -104,7 +104,7 @@ service cloud.firestore {
 
     function isValidNote(data) {
       return hasRequiredFields(['userId', 'title', 'content', 'maskedContent', 'rawContent', 'hasSensitiveData', 'status', 'createdAt', 'updatedAt']) &&
-             hasOnlyAllowedFields(['id', 'userId', 'title', 'content', 'maskedContent', 'rawContent', 'category', 'tags', 'isAutoSorted', 'isStarred', 'isPublic', 'isPinned', 'isArchived', 'hasSensitiveData', 'status', 'password', 'lockMethod', 'lockedAt', 'failedAttempts', 'lockedUntil', 'error', 'formatType', 'isTrashed', 'trashedAt', 'needsEnhancement', 'suggestedEnhancement', 'linkPreview', 'sortOrder', 'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(['id', 'userId', 'title', 'content', 'maskedContent', 'rawContent', 'category', 'tags', 'isAutoSorted', 'isStarred', 'isPublic', 'isPinned', 'isArchived', 'hasSensitiveData', 'status', 'password', 'lockMethod', 'lockedAt', 'failedAttempts', 'lockedUntil', 'error', 'formatType', 'isTrashed', 'trashedAt', 'needsEnhancement', 'suggestedEnhancement', 'linkPreview', 'sortOrder', 'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder', 'createdViaVoice', 'contentFormat', 'createdAt', 'updatedAt']) &&
              data.userId == request.auth.uid &&
              data.title is string && data.title.size() <= 1000 &&
              data.content is string && data.content.size() <= 100000 &&
@@ -132,6 +132,8 @@ service cloud.firestore {
              (!('lockedUntil' in data) || (data.lockedUntil is timestamp || data.lockedUntil == null)) &&
              (!('error' in data) || (data.error is string && data.error.size() <= 2000) || data.error == null) &&
              (!('formatType' in data) || (data.formatType is string && data.formatType in ['auto', 'todo', 'email', 'blog', 'tweet', 'meeting', 'flashcards', 'lyrics'])) &&
+             (!('createdViaVoice' in data) || data.createdViaVoice is bool) &&
+             (!('contentFormat' in data) || (data.contentFormat is string && data.contentFormat in ['html', 'markdown'])) &&
              // Embedding is an array of floats, capped to keep doc size sane.
              // 768 dims for text-embedding-004 — leave headroom for future
              // models with up to 3072 dims (gemini-embedding-001 max).
@@ -167,7 +169,8 @@ service cloud.firestore {
                             'title', 'content', 'maskedContent', 'rawContent', 'category', 
                             'tags', 'isAutoSorted', 'hasSensitiveData', 'error', 'formatType',
                             'needsEnhancement', 'suggestedEnhancement', 'linkPreview', 'sortOrder',
-                            'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder'].toSet();
+                            'backgroundColor', 'source', 'embedding', 'embeddingHash', 'reminder',
+                            'createdViaVoice', 'contentFormat'].toSet();
       return changed.hasOnly(allowedChanges);
     }
 
